@@ -118,45 +118,37 @@ happened in the notes. The addin cannot work around a UDC that will not bind the
 
 Build on the workstation: `tools/build_armhf.sh`, which gives `build/armhf/libmpc_usb_audio.so`.
 
-2a. Copy files (MPC keeps running; nothing loads them yet):
+2a. Copy the package (MPC keeps running; nothing loads it yet):
 
 ```sh
-# device
-mkdir -p /data/mpc-usb-audio
 # workstation
-scp build/armhf/libmpc_usb_audio.so root@<device>:/data/mpc-usb-audio/libmpc_usb_audio.so.new
-scp etc/usbaudio.conf.example      root@<device>:/data/mpc-usb-audio/usbaudio.conf.new
-# device
-cd /data/mpc-usb-audio && mv libmpc_usb_audio.so.new libmpc_usb_audio.so && mv usbaudio.conf.new usbaudio.conf
+scp -r build/package root@<device>:/data/mpc-addins-usb-audio-pkg
 ```
 
-For the first boot, set `test_tone=1` in `usbaudio.conf`:
+For the first boot, set `test_tone=1` in the package's `usbaudio.conf` before installing:
 the computer then records a 1 kHz tone, which proves the USB path without MPC's audio.
 
-2b. Add a systemd drop-in that appends the addin to MPC's existing `LD_PRELOAD`. A drop-in's
-`Environment=LD_PRELOAD=...` replaces the unit's value, so it must repeat what step 0 printed, with
-the addin last:
+2b. Install, without restarting MPC yet:
 
 ```sh
-CUR=$(systemctl show $SVC -p Environment | tr ' ' '\n' | sed -n 's/^.*LD_PRELOAD=//p')
-mkdir -p /etc/systemd/system/$SVC.service.d
-D=/etc/systemd/system/$SVC.service.d/usb-audio.conf
-printf '[Service]\nEnvironment=LD_PRELOAD=%s\n' "${CUR:+$CUR:}/data/mpc-usb-audio/libmpc_usb_audio.so" > $D.new
-cat $D.new                      # check it before going on
-mv $D.new $D
-systemctl daemon-reload
+# device
+cd /data/mpc-addins-usb-audio-pkg && sh install.sh -n
 systemctl show $SVC -p Environment -p DropInPaths
 ```
 
-`/etc` is an overlay backed by `/data`, so the drop-in survives a reboot. A firmware update that
-changes the unit's own `LD_PRELOAD` would be shadowed by this file. Re-check it after any update.
+The installer (mpc-addin-installer) copies the files into `/data/mpc-addins/usb-audio/` and appends the
+library to the `LD_PRELOAD` line that takes effect. Where the unit already sets it, that line is edited in
+place, with a `.bak-mpc-addins` copy kept. It doesn't add a drop-in that repeats the list, because that would
+shadow later changes to the unit. Check that the printed `LD_PRELOAD` still holds everything step 0 printed,
+with the addin last. `/etc` is an overlay backed by `/data`, so the change survives a reboot. A firmware
+update rewrites the unit, so re-run `install.sh` after one.
 
 2c. Restart MPC (approval needed): `systemctl restart $SVC`.
 
 2d. Check:
 
 ```sh
-cat /data/mpc-usb-audio/usbaudio.log
+cat /data/mpc-addins/usb-audio/usbaudio.log
 #   expect: active ... / tapping playback PCM ... / playback: 2 ch, format 10, 44100 Hz /
 #           uac2.usbaudio added to gadget 'standalone' / forwarder started / session on hw:N,0 ...
 ls $G/functions; ls $G/configs/config.1; cat $G/UDC
@@ -172,11 +164,8 @@ playing a sequence. Channels 1-2 are the main out and 3-4 are MPC's inputs.
 2e. Revert:
 
 ```sh
-rm /etc/systemd/system/$SVC.service.d/usb-audio.conf
-rmdir /etc/systemd/system/$SVC.service.d 2>/dev/null
-systemctl daemon-reload
-systemctl restart $SVC          # MPC rebuilds the MIDI-only gadget without the addin
-rm -r /data/mpc-usb-audio       # optional
+cd /data/mpc-addins-usb-audio-pkg && sh uninstall.sh   # takes only this addin out of LD_PRELOAD, restarts MPC
+                                                       # (it rebuilds the MIDI-only gadget), deletes its folder
 ```
 
 Emergency off switch without touching systemd: put `enabled=0` in `usbaudio.conf` and restart MPC.
@@ -198,7 +187,7 @@ interface. Also check MPC's audio-device menu does not list "UAC2_Gadget".
   wherever MPC routes its inputs (input monitoring on a track, or sampling). Check sampling records
   it.
 - Soak test: record for 30 minutes on the computer while MPC plays and the computer plays. Then
-  `grep 'to computer' /data/mpc-usb-audio/usbaudio.log`. The pitch values should settle near
+  `grep 'to computer' /data/mpc-addins/usb-audio/usbaudio.log`. The pitch values should settle near
   1000000 (typically within a few hundred ppm) and stay put, and the overflow/underrun counters should not grow
   after the first minute. A pitch pinned at `max_ppm` means the drift direction is wrong for that
   side. That would be a code fix (the sign in `fwd.c`), not a setting.

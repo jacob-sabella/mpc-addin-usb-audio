@@ -58,4 +58,5 @@ FAKE_CONFIGFS="$tmp/cfs2" LD_PRELOAD="$ASANLIB:$tmp/addin/libmpc_usb_audio.so" "
 grep -q "config $tmp/addin/usbaudio.conf" "$tmp/addin/usbaudio.log" && ! grep -q "unreadable\|problem" "$tmp/addin/usbaudio.log" ||
   { echo "FAIL: settings and log next to the .so"; cat "$tmp/addin/usbaudio.log" 2>/dev/null; exit 1; }
 echo "ok   settings and log next to the .so"
+tools/test_install.sh
 echo "all host tests passed"

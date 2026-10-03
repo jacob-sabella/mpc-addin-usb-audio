@@ -1,0 +1,7 @@
+# Read by install.sh and uninstall.sh (mpc-addin-installer). See that repo's README for the fields.
+ADDIN_ID=usb-audio
+ADDIN_NAME="MPC USB audio addin"
+ADDIN_SO=libmpc_usb_audio.so
+ADDIN_CONF=usbaudio.conf
+ADDIN_FILES=""
+ADDIN_DONE="Connect the MPC to a computer: it shows up as a USB audio device next to its MIDI ports. Log: usbaudio.log in this folder."

@@ -64,14 +64,18 @@ time from what MPC has already loaded.
 
 ## Install
 
-See `docs/DEVICE_TEST.md` steps 2a-2e:
+Needs root on the device (SSH). `tools/build_armhf.sh` builds `build/package/`: copy that folder to the device
+and run, as root, in it:
 
-1. Copy the library and config to `/data/mpc-usb-audio/`.
-2. Add a systemd drop-in for MPC's unit that appends the library to the existing `LD_PRELOAD`.
-3. Restart MPC.
+```sh
+sh install.sh            # asks first; -y doesn't ask, -n doesn't restart MPC, -t <folder> installs elsewhere
+sh uninstall.sh
+```
 
-To revert, remove the drop-in and restart MPC. For a quick off switch, put `enabled=0` in
-`usbaudio.conf`.
+It installs into `/data/mpc-addins/usb-audio/` and **adds** the library to `LD_PRELOAD` in MPC's systemd service;
+other addins and libraries already in it stay. Reinstalling keeps your `usbaudio.conf`. The scripts are the shared
+[mpc-addin-installer](../mpc-addin-installer) (identical in every addin; `addin.manifest` describes this one). For a
+quick off switch without uninstalling, put `enabled=0` in `usbaudio.conf` and restart MPC.
 
 ## Configuration
 
