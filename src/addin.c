@@ -290,6 +290,16 @@ static inline int tapping(mpcua_stream *s) {
          atomic_load_explicit(&g_ua.fwd_running, memory_order_relaxed);
 }
 
+/* Statistics for the 10 s log line: the stream's largest |sample| in what was just tapped. */
+static void note_peak(mpcua_stream *s, const int32_t *p, uint32_t n) {
+  uint32_t m = atomic_load_explicit(&s->peak, memory_order_relaxed);
+  for (uint32_t i = 0; i < n; i++) {
+    uint32_t a = p[i] < 0 ? (uint32_t)0 - (uint32_t)p[i] : (uint32_t)p[i];
+    if (a > m) m = a;
+  }
+  atomic_store_explicit(&s->peak, m, memory_order_relaxed);
+}
+
 /* Interleaved buffer -> ring as int32. */
 static void tap_i(mpcua_stream *s, mpcua_ring *q, const void *buf, uint32_t frames,
                   _Atomic unsigned long *ovf) {
@@ -301,6 +311,8 @@ static void tap_i(mpcua_stream *s, mpcua_ring *q, const void *buf, uint32_t fram
   mpcua_ring_wseg(q, frames * ch, &p1, &n1, &p2, &n2);
   mpcua_fmt_to_s32(buf, s->fmt, p1, n1);
   if (n2) mpcua_fmt_to_s32((const char *)buf + (size_t)n1 * mpcua_fmt_bytes(s->fmt), s->fmt, p2, n2);
+  note_peak(s, p1, n1); note_peak(s, p2, n2);
+  atomic_fetch_add_explicit(&s->frames, frames, memory_order_relaxed);
   mpcua_ring_wcommit(q, frames * ch);
 }
 
@@ -317,6 +329,8 @@ static void tap_n(mpcua_stream *s, mpcua_ring *q, void **bufs, uint32_t frames,
   for (int seg = 0; seg < 2; seg++)
     for (uint32_t k = 0; k < n[seg]; k++, j++)
       p[seg][k] = bufs[j % ch] ? mpcua_fmt_get(bufs[j % ch], s->fmt, j / ch) : 0;
+  note_peak(s, p[0], n[0]); note_peak(s, p[1], n[1]);
+  atomic_fetch_add_explicit(&s->frames, frames, memory_order_relaxed);
   mpcua_ring_wcommit(q, frames * ch);
 }
 
@@ -351,6 +365,8 @@ static void inject(void *buf, void **bufs, uint32_t frames) {
 EXPORT snd_pcm_sframes_t snd_pcm_writei(snd_pcm_t *pcm, const void *buf, snd_pcm_uframes_t n) {
   if (!real_writei) return -ENOSYS;
   snd_pcm_sframes_t r = real_writei(pcm, buf, n);
+  if (r > 0 && pcm == atomic_load_explicit(&g_ua.play.pcm, memory_order_relaxed))
+    atomic_fetch_add_explicit(&g_ua.play.calls, 1, memory_order_relaxed);
   if (r > 0 && pcm == atomic_load_explicit(&g_ua.play.pcm, memory_order_relaxed) &&
       tapping(&g_ua.play) && g_ua.play.interleaved)
     tap_i(&g_ua.play, &g_ua.out_ring, buf, (uint32_t)r, &g_ua.ovf_out);
@@ -360,6 +376,8 @@ EXPORT snd_pcm_sframes_t snd_pcm_writei(snd_pcm_t *pcm, const void *buf, snd_pcm
 EXPORT snd_pcm_sframes_t snd_pcm_writen(snd_pcm_t *pcm, void **bufs, snd_pcm_uframes_t n) {
   if (!real_writen) return -ENOSYS;
   snd_pcm_sframes_t r = real_writen(pcm, bufs, n);
+  if (r > 0 && pcm == atomic_load_explicit(&g_ua.play.pcm, memory_order_relaxed))
+    atomic_fetch_add_explicit(&g_ua.play.calls, 1, memory_order_relaxed);
   if (r > 0 && pcm == atomic_load_explicit(&g_ua.play.pcm, memory_order_relaxed) &&
       tapping(&g_ua.play) && !g_ua.play.interleaved && bufs)
     tap_n(&g_ua.play, &g_ua.out_ring, bufs, (uint32_t)r, &g_ua.ovf_out);
@@ -369,6 +387,8 @@ EXPORT snd_pcm_sframes_t snd_pcm_writen(snd_pcm_t *pcm, void **bufs, snd_pcm_ufr
 EXPORT snd_pcm_sframes_t snd_pcm_readi(snd_pcm_t *pcm, void *buf, snd_pcm_uframes_t n) {
   if (!real_readi) return -ENOSYS;
   snd_pcm_sframes_t r = real_readi(pcm, buf, n);
+  if (r > 0 && pcm == atomic_load_explicit(&g_ua.cap.pcm, memory_order_relaxed))
+    atomic_fetch_add_explicit(&g_ua.cap.calls, 1, memory_order_relaxed);
   if (r > 0 && pcm == atomic_load_explicit(&g_ua.cap.pcm, memory_order_relaxed) &&
       g_ua.cap.interleaved) {
     if (g_ua.need_in && tapping(&g_ua.cap)) tap_i(&g_ua.cap, &g_ua.in_ring, buf, (uint32_t)r, &g_ua.ovf_in);
@@ -380,6 +400,8 @@ EXPORT snd_pcm_sframes_t snd_pcm_readi(snd_pcm_t *pcm, void *buf, snd_pcm_uframe
 EXPORT snd_pcm_sframes_t snd_pcm_readn(snd_pcm_t *pcm, void **bufs, snd_pcm_uframes_t n) {
   if (!real_readn) return -ENOSYS;
   snd_pcm_sframes_t r = real_readn(pcm, bufs, n);
+  if (r > 0 && pcm == atomic_load_explicit(&g_ua.cap.pcm, memory_order_relaxed))
+    atomic_fetch_add_explicit(&g_ua.cap.calls, 1, memory_order_relaxed);
   if (r > 0 && bufs && pcm == atomic_load_explicit(&g_ua.cap.pcm, memory_order_relaxed) &&
       !g_ua.cap.interleaved) {
     if (g_ua.need_in && tapping(&g_ua.cap)) tap_n(&g_ua.cap, &g_ua.in_ring, bufs, (uint32_t)r, &g_ua.ovf_in);

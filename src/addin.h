@@ -17,6 +17,8 @@ typedef struct {
   mpcua_fmt fmt;
   unsigned ch, rate;
   int interleaved;
+  _Atomic unsigned long calls, frames;   /* MPC's reads/writes on this PCM, frames tapped (for the stats) */
+  _Atomic uint32_t peak;                 /* largest |sample| tapped since the last stats line */
 } mpcua_stream;
 
 typedef struct {

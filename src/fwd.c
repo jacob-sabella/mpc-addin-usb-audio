@@ -304,6 +304,8 @@ static void service_drift(session *S, double t) {
   }
 }
 
+static double dbfs(uint32_t peak) { return peak ? 20.0 * log10((double)peak / 2147483648.0) : -999.0; }
+
 static void stats(session *S, double t) {
   if (t - S->last_stats < 10.0) return;
   S->last_stats = t;
@@ -313,6 +315,9 @@ static void stats(session *S, double t) {
             S->pc.ok ? S->pc.last : 0, atomic_load(&g_ua.host_live) ? "live" : "idle",
             atomic_load(&g_ua.ovf_out), atomic_load(&g_ua.ovf_in), atomic_load(&g_ua.ovf_host),
             atomic_load(&g_ua.und_host));
+  mpcua_log("tapped: main out %lu calls %lu fr peak %.1f dBFS, inputs %lu calls %lu fr peak %.1f dBFS",
+            atomic_load(&g_ua.play.calls), atomic_load(&g_ua.play.frames), dbfs(atomic_exchange(&g_ua.play.peak, 0)),
+            atomic_load(&g_ua.cap.calls), atomic_load(&g_ua.cap.frames), dbfs(atomic_exchange(&g_ua.cap.peak, 0)));
 }
 
 static void run_session(int card) {
