@@ -1,4 +1,4 @@
-# mpc-usb-audio settings. Install as /data/mpc-usb-audio/usbaudio.conf (or point MPC_USB_AUDIO_CONF
+# mpc-addin-usb-audio settings: usbaudio.conf next to the addin's .so (or point MPC_USB_AUDIO_CONF
 # at another file). Read once when MPC starts; a missing file means the defaults shown here.
 # Unknown keys and bad values are reported in the log and ignored.
 
@@ -52,5 +52,5 @@ drift_bw=0.01
 # 1: send a 1 kHz tone to the computer instead of MPC's audio (USB path check).
 test_tone=0
 
-# "" disables the log. The file is truncated when it passes 256 KiB.
-log=/data/mpc-usb-audio/usbaudio.log
+# auto: usbaudio.log next to the .so; or a path; "" disables the log. Truncated when it passes 256 KiB.
+log=auto

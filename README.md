@@ -75,7 +75,7 @@ To revert, remove the drop-in and restart MPC. For a quick off switch, put `enab
 
 ## Configuration
 
-Read from `/data/mpc-usb-audio/usbaudio.conf` (or `$MPC_USB_AUDIO_CONF`) when MPC starts. See
+Read from `usbaudio.conf` in the addin's folder (or `$MPC_USB_AUDIO_CONF`) when MPC starts. See
 `etc/usbaudio.conf.example`. The settings changed most often:
 
 - `to_host=out1,out2,in1,in2`: what the computer records.
@@ -84,7 +84,7 @@ Read from `/data/mpc-usb-audio/usbaudio.conf` (or `$MPC_USB_AUDIO_CONF`) when MP
 - `target_frames`: latency against robustness.
 - `test_tone=1`: a 1 kHz tone to the computer, to check the USB path.
 
-The log is `/data/mpc-usb-audio/usbaudio.log`, with a stats line every 10 s.
+The log is `usbaudio.log` in the addin's folder (`log=` moves or disables it), with a stats line every 10 s.
 
 ## Limits
 

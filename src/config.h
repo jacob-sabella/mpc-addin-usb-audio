@@ -1,12 +1,12 @@
 /* config.h: addin settings, read once from a key=value file (default
- * /data/mpc-usb-audio/usbaudio.conf, or $MPC_USB_AUDIO_CONF). A missing file means defaults. */
+ * usbaudio.conf next to the .so, or $MPC_USB_AUDIO_CONF). A missing file means defaults. */
 #ifndef MPCUA_CONFIG_H
 #define MPCUA_CONFIG_H
 
 #include <stddef.h>
 #include "chmap.h"
 
-#define MPCUA_DEFAULT_CONF "/data/mpc-usb-audio/usbaudio.conf"
+#define MPCUA_CONF_NAME "usbaudio.conf"   /* next to the .so, unless $MPC_USB_AUDIO_CONF names one */
 
 enum { MPCUA_INPUT_OFF = 0, MPCUA_INPUT_SUM = 1, MPCUA_INPUT_REPLACE = 2 };
 
@@ -32,7 +32,7 @@ typedef struct {
   double max_ppm;           /* max_ppm=1000 */
   double drift_bw;          /* drift_bw=0.01 (Hz) */
   int test_tone;            /* test_tone=0        (1: send a 1 kHz tone instead of the tap) */
-  char log_path[160];       /* log=/data/mpc-usb-audio/usbaudio.log ("" disables) */
+  char log_path[160];       /* log=auto: usbaudio.log next to the .so; a path; "" disables */
 
   mpcua_chsrc to_host_map[MPCUA_MAX_CH]; int n_to_host;
   mpcua_chsrc to_mpc_map[MPCUA_MAX_CH];  int n_to_mpc;

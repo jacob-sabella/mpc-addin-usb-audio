@@ -33,7 +33,7 @@ void mpcua_cfg_defaults(mpcua_cfg *c) {
   c->fwd_periods = 4;
   c->max_ppm = 1000;
   c->drift_bw = 0.01;
-  snprintf(c->log_path, sizeof c->log_path, "/data/mpc-usb-audio/usbaudio.log");
+  snprintf(c->log_path, sizeof c->log_path, "auto");
   mpcua_cfg_finish(c, NULL, 0);
 }
 

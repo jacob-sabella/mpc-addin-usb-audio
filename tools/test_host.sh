@@ -49,4 +49,13 @@ run "$B/bin/not-mpc" "$tmp/cfs" inert
 run /bin/true
 echo "--- addin log"
 cat "$tmp/usbaudio.log"
+# Installed layout: no MPC_USB_AUDIO_CONF; usbaudio.conf is read from the .so's folder and log=auto writes there.
+mkdir -p "$tmp/addin" "$tmp/cfs2"
+cp "$B/libmpc_usb_audio.so" "$tmp/addin/"
+printf 'configfs=%s\ntap_card=0\n' "$tmp/cfs2" > "$tmp/addin/usbaudio.conf"
+FAKE_CONFIGFS="$tmp/cfs2" LD_PRELOAD="$ASANLIB:$tmp/addin/libmpc_usb_audio.so" "$B/bin/MPC" "$tmp/cfs2" ||
+  { cat "$tmp/addin/usbaudio.log" 2>/dev/null; exit 1; }
+grep -q "config $tmp/addin/usbaudio.conf" "$tmp/addin/usbaudio.log" && ! grep -q "unreadable\|problem" "$tmp/addin/usbaudio.log" ||
+  { echo "FAIL: settings and log next to the .so"; cat "$tmp/addin/usbaudio.log" 2>/dev/null; exit 1; }
+echo "ok   settings and log next to the .so"
 echo "all host tests passed"

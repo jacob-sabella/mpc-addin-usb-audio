@@ -19,6 +19,7 @@
 
 #include <dlfcn.h>
 #include <errno.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -67,6 +68,26 @@ static int exe_is_mpc(void) {
   return strcmp(b ? b + 1 : p, "MPC") == 0;
 }
 
+/* The folder this .so was loaded from (the installer puts its settings and log there), "" if unknown. */
+static void addin_dir(char *out, size_t n) {
+  out[0] = 0;
+  FILE *f = fopen("/proc/self/maps", "re");
+  if (!f) return;
+  unsigned long me = (unsigned long)(uintptr_t)&addin_dir;
+  char line[512];
+  while (fgets(line, sizeof line, f)) {
+    unsigned long a, b;
+    char *path = strchr(line, '/');
+    if (!path || sscanf(line, "%lx-%lx", &a, &b) != 2 || me < a || me >= b) continue;
+    path[strcspn(path, "\n")] = 0;
+    char *slash = strrchr(path, '/');
+    if (slash) *slash = 0;
+    if (strlen(path) < n) memcpy(out, path, strlen(path) + 1);   /* too long: unknown, never a truncated path */
+    break;
+  }
+  fclose(f);
+}
+
 /* The codec card: same rule as MPC's own controller-mode forwarder (/dev/snd/by-path/platform-sound). */
 static int resolve_tap_card(const mpcua_cfg *c) {
   if (c->tap_card >= 0) return c->tap_card;
@@ -82,13 +103,19 @@ __attribute__((constructor)) static void mpcua_ctor(void) {
   resolve_reals();
   if (!exe_is_mpc()) return;
 
+  char dir[128], defpath[160];   /* dir + "/usbaudio.log" fits log_path */
+  addin_dir(dir, sizeof dir);
+  snprintf(defpath, sizeof defpath, "%s/%s", dir[0] ? dir : ".", MPCUA_CONF_NAME);
   const char *path = getenv("MPC_USB_AUDIO_CONF");
-  if (!path || !*path) path = MPCUA_DEFAULT_CONF;
+  if (!path || !*path) path = defpath;
   char err[160] = "";
   int bad = mpcua_cfg_load(&g_ua.cfg, path, err, sizeof err);
+  if (!strcmp(g_ua.cfg.log_path, "auto"))
+    snprintf(g_ua.cfg.log_path, sizeof g_ua.cfg.log_path, "%s/usbaudio.log", dir[0] ? dir : ".");
   mpcua_log_open(g_ua.cfg.log_path);
   if (bad < 0) mpcua_log("config %s unreadable, using defaults", path);
   else if (bad) mpcua_log("config %s: %d problem(s), first: %s", path, bad, err);
+  else mpcua_log("config %s", path);
   if (!g_ua.cfg.enabled) { mpcua_log("disabled in config"); return; }
 
   int missing = mpcua_alsa_resolve(&g_ua.alsa);
