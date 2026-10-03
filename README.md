@@ -63,6 +63,8 @@ tools/build_armhf.sh     # needs Docker with arm/v7 emulation -> build/armhf/lib
 The library links only libc, libdl, libpthread and libm. libasound and libusbgx are looked up at run
 time from what MPC has already loaded.
 
+CI (`.github/workflows`): `test.yml` runs the tests and the armhf build on every push; `release.yml` (Actions > Release, with the version) builds the zip and attaches it to a draft release, to publish once it has been tried on a device.
+
 ## Install
 
 Needs root on the device (SSH). Unzip a release (`MPC-USB-audio-addin-<version>-mpc-armv7.zip`) on the device and

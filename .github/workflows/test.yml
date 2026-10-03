@@ -1,0 +1,35 @@
+# The offline tests on every push and pull request (host tests under the sanitizers, the installer in BusyBox) and the
+# armhf build under QEMU, which enforces the glibc floor.
+#
+# mpc-vst-plugins is pinned to the same commit as release.yml: the fork's addins branch (sd88me/mpc-vst-plugins#144,
+# the addin installer and tools) until it is upstream. Move both pins together.
+name: Test
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  host:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with: { path: mpc-addin-usb-audio }
+      - uses: actions/checkout@v4
+        with:
+          repository: jacob-sabella/mpc-vst-plugins
+          ref: 1c4b4fc5a55419c1f0df0d90ac0979ba25c953cb
+          path: mpc-vst-plugins
+      # TSan can't map its shadow memory with the runner's default 32 bits of mmap randomness
+      - run: sudo sysctl -q vm.mmap_rnd_bits=28
+      - run: sudo apt-get install -y -q busybox
+      - run: TSAN=1 tools/test_host.sh
+        working-directory: mpc-addin-usb-audio
+  armhf:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-qemu-action@v3
+        with: { platforms: arm }
+      - run: tools/build_armhf.sh
