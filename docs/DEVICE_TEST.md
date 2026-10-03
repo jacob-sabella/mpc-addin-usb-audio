@@ -136,12 +136,12 @@ cd /data/mpc-addins-usb-audio-pkg && sh install.sh -n
 systemctl show $SVC -p Environment -p DropInPaths
 ```
 
-The installer (mpc-addin-installer) copies the files into `/data/mpc-addins/usb-audio/` and appends the
-library to the `LD_PRELOAD` line that takes effect. Where the unit already sets it, that line is edited in
-place, with a `.bak-mpc-addins` copy kept. It doesn't add a drop-in that repeats the list, because that would
-shadow later changes to the unit. Check that the printed `LD_PRELOAD` still holds everything step 0 printed,
-with the addin last. `/etc` is an overlay backed by `/data`, so the change survives a reboot. A firmware
-update rewrites the unit, so re-run `install.sh` after one.
+The installer (mpc-addin-installer) copies the files into `/data/mpc-addins/usb-audio/` and adds the library
+to `LD_PRELOAD`. The unit sits on the read-only root, so the drop-in
+`/etc/systemd/system/$SVC.service.d/90-mpc-addins.conf` sets it: the unit's list (recorded as `# base:`), then
+the addins. Check that the printed `LD_PRELOAD` holds everything step 0 printed, with the addin last. `/etc`
+is an overlay backed by `/data`, so the drop-in survives a reboot. After a firmware update, re-run
+`install.sh`: it picks up the unit's new list.
 
 2c. Restart MPC (approval needed): `systemctl restart $SVC`.
 
@@ -151,8 +151,9 @@ update rewrites the unit, so re-run `install.sh` after one.
 cat /data/mpc-addins/usb-audio/usbaudio.log
 #   expect: active ... / tapping playback PCM ... / playback: 2 ch, format 10, 44100 Hz /
 #           uac2.usbaudio added to gadget 'standalone' / forwarder started / session on hw:N,0 ...
+#           and every 10 s: tapped: main out <calls> <frames> fr peak <dBFS> (MPC's output as tapped)
 ls $G/functions; ls $G/configs/config.1; cat $G/UDC
-grep usbaudio /proc/$(pidof MPC)/maps | head -n 1
+grep -c libmpc_usb_audio /proc/$(pidof MPC)/maps
 for t in /proc/$(pidof MPC)/task/*; do grep -q usbaudio $t/comm && awk '{print "policy", $41, "rtprio", $40}' $t/stat; done
 #   expect: policy 0 rtprio 0 (SCHED_OTHER)
 ```
@@ -213,3 +214,31 @@ heavily (many plugins or tracks) and check the log for overflow and underrun cou
 - Coming back to standalone mode, the addin's function reappears (log: `uac2.usbaudio added`).
 
 Record every result, with the date, in the project notes.
+
+## Results: step 2 (2026-10-02, MPC Key 37, firmware 3.9.1.2)
+
+Installed with `sh install.sh -n` from the package, then MPC restarted. **Passed.**
+
+- The unit (`/usr/lib/systemd/system/acvs.service`) is on the read-only root. The installer wrote
+  `90-mpc-addins.conf`, which holds the unit's two libraries and then the addin, and `systemctl show`
+  gave that list.
+- The log showed: settings read from `/data/mpc-addins/usb-audio/usbaudio.conf`; `uac2.usbaudio` added to gadget
+  'standalone'; both codec PCMs tapped (2 ch, S32_LE, 44.1 kHz, interleaved); a session on the gadget card.
+  The first time MPC started, the session came up 5 s in; another time, 16 s in, because MPC opened its
+  audio later.
+- The gadget has `midi.midi` and `uac2.usbaudio`, on the same UDC.
+- **No rebind:** `/proc/asound/seq/clients` matched the copy taken before the restart: `f_midi` was still
+  connected to MPC's client both ways, on both ports. USB MIDI kept working after every restart.
+- The forwarder thread `usbaudio-fwd` is SCHED_OTHER (policy 0, rtprio 0).
+- On the computer, the device enumerated as USB audio (4 ch in, 2 out).
+- `test_tone=1`: recorded 10 s, 4 ch at 44.1 kHz. Every channel held a 1 kHz tone at rms 0.177, with no
+  energy outside the peak and no sample steps above the tone's own (no dropouts).
+- `test_tone=0`, after a restart: notes were sent into the active drum track (a seq client playing notes
+  36-67) while the computer recorded. Channels 1-2 (main out) peaked at -11.0 / -10.3 dBFS, the same as
+  the addin's own `tapped:` line (-11.0 dBFS). Channels 3-4 (MPC's inputs, nothing plugged in) were at the
+  noise floor, about -98 dBFS. No overflows or underruns. The tap saw about 345 calls/s on each stream,
+  i.e. 44,100 frames/s at period 128.
+- The first `test_tone=0` recording was silent: the notes then (48-72) mostly landed on empty pads, and the
+  log at that point had no tap counters to tell. Hence the `tapped:` line.
+
+The addin is left installed on the device. Remove it with `sh uninstall.sh` from the package folder.
