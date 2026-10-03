@@ -1,0 +1,56 @@
+# mpc-usb-audio settings. Install as /data/mpc-usb-audio/usbaudio.conf (or point MPC_USB_AUDIO_CONF
+# at another file). Read once when MPC starts; a missing file means the defaults shown here.
+# Unknown keys and bad values are reported in the log and ignored.
+
+enabled=1
+
+# --- USB side --------------------------------------------------------------------------------
+# The gadget MPC builds in standalone mode, and the name of the function added to it.
+gadget=standalone
+instance=usbaudio
+configfs=/sys/kernel/config/usb_gadget
+
+# Must equal the rate MPC runs its codec at, or nothing is tapped (the log says so).
+rate=44100
+# Bytes per sample on USB: 2, 3 or 4.
+sample_bytes=4
+
+# Channels the computer records, in order. out1..outN are MPC's playback channels on the codec
+# (out1,out2 = main out), in1..inN are MPC's inputs as MPC reads them (before computer audio is
+# mixed in), "0" or "-" is silence. Up to 16. Keep it at 5 channels or fewer with hs_bint=4 (FIFO
+# limit, see docs/FEASIBILITY.md); for more, set hs_bint=1.
+to_host=out1,out2,in1,in2
+
+# Channels the computer plays to the MPC (0 = no playback device on the computer).
+host_channels=2
+# Where they land: one entry per MPC input channel, host1..hostN or 0 (nothing).
+to_mpc_in=host1,host2
+# sum: add computer audio to the MPC inputs; replace: computer audio instead of the inputs;
+# off: computer audio is received but dropped.
+input_mode=sum
+
+# USB service interval 2^(n-1) x 125 us (1..4) and the kernel's request count (0 = default).
+hs_bint=4
+req_number=0
+# Device class EF/02/01 (needed by some hosts for a composite device with an audio IAD).
+iad_class=1
+function_name=MPC USB Audio
+
+# --- MPC side --------------------------------------------------------------------------------
+# ALSA card of the codec: auto follows /dev/snd/by-path/platform-sound.
+tap_card=auto
+
+# Frames queued in each direction (latency vs. safety); -1 latches the first measured fill.
+target_frames=256
+# Period and period count the forwarder uses on the gadget's ALSA card.
+fwd_period=64
+fwd_periods=4
+# Clock-drift correction: largest pitch offset (ppm) and loop bandwidth (Hz).
+max_ppm=1000
+drift_bw=0.01
+
+# 1: send a 1 kHz tone to the computer instead of MPC's audio (USB path check).
+test_tone=0
+
+# "" disables the log. The file is truncated when it passes 256 KiB.
+log=/data/mpc-usb-audio/usbaudio.log
