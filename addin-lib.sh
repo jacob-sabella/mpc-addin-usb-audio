@@ -4,7 +4,7 @@ ADDIN_LIB_VERSION=1
 # Tests set ADDIN_INSTALL_TEST=1, SYSTEMD_ROOT (a scratch tree holding the unit files) and ADDIN_TEST_LOG.
 
 UNIT_DIRS="/etc/systemd/system /run/systemd/system /usr/lib/systemd/system /lib/systemd/system"
-DROPIN_NAME=50-mpc-addins.conf   # one drop-in shared by every addin, when the service sets no LD_PRELOAD itself
+DROPIN_NAME=90-mpc-addins.conf   # one drop-in shared by every addin, where no writable file sets LD_PRELOAD
 
 svc() {   # systemctl, or a log line under test
     if [ -n "$ADDIN_INSTALL_TEST" ]; then echo "systemctl $*" >> "${ADDIN_TEST_LOG:-/dev/null}"; return 0; fi
@@ -21,7 +21,11 @@ mpc_service() {
     echo acvs
 }
 
-# The unit file or drop-in whose Environment= line sets LD_PRELOAD and wins (the last one systemd reads), if any.
+ours() { echo "$SYSTEMD_ROOT/etc/systemd/system/$1.service.d/$DROPIN_NAME"; }   # service
+writable() { [ -w "$1" ] && [ -w "$(dirname "$1")" ]; }   # false on a read-only mount, as root too
+
+# The unit file or drop-in whose Environment= line sets LD_PRELOAD and wins (the last one systemd reads), if any;
+# a second argument leaves that file out.
 unit_with_preload() {
     found=""
     for d in $UNIT_DIRS; do   # the main unit: the first directory that has it
@@ -29,6 +33,7 @@ unit_with_preload() {
         if [ -f "$f" ]; then grep -q '^Environment=.*LD_PRELOAD=' "$f" && found="$f"; break; fi
     done
     for f in $(for d in $UNIT_DIRS; do ls "$SYSTEMD_ROOT$d/$1.service.d/"*.conf 2>/dev/null; done | awk -F/ '{print $NF "\t" $0}' | sort | cut -f2); do
+        [ "$f" = "$2" ] && continue
         grep -q '^Environment=.*LD_PRELOAD=' "$f" && found="$f"   # drop-ins apply in name order
     done
     echo "$found"
@@ -60,30 +65,65 @@ edit_preload() {   # file mode so
     mv "$1.new" "$1"
 }
 
+# The LD_PRELOAD value a file sets (its last such line), ":"-joined; "" if none.
+preload_of() {
+    [ -f "$1" ] || return 0
+    awk '/^Environment=/ && (i = index($0, "LD_PRELOAD=")) {
+        pre = substr($0, 1, i - 1); rest = substr($0, i + 11)
+        e = index(rest, substr(pre, length(pre), 1) == "\"" ? "\"" : " "); if (!e) e = length(rest) + 1
+        v = substr(rest, 1, e - 1); gsub(/[: ]+/, ":", v); sub(/^:/, "", v); sub(/:$/, "", v); out = v
+    } END { print out }' "$1"
+}
+in_list() { case ":$1:" in *":$2:"*) return 0 ;; esac; return 1; }   # list item
+
+# The shared drop-in, where no writable file sets LD_PRELOAD (on these devices the unit is on a read-only root).
+# systemd replaces the variable, so the drop-in repeats the unit's list (its "base", recorded in a comment) and
+# appends the addins. When the unit's list changes (a firmware update), the next install or uninstall rebuilds it
+# from the new base: the addins are kept, the firmware's libraries are not shadowed.
+sync_ours() {   # service add-so remove-so
+    f=$(ours "$1"); base=$(preload_of "$(unit_with_preload "$1" "$f")"); addins=""
+    if [ -f "$f" ]; then
+        oldbase=$(sed -n 's/^# base: *//p' "$f"); IFS0=$IFS; IFS=:
+        for e in $(preload_of "$f"); do in_list "$oldbase" "$e" || addins="$addins${addins:+:}$e"; done
+        IFS=$IFS0
+    fi
+    new=""; IFS0=$IFS; IFS=:
+    for e in $addins $2; do
+        [ -n "$e" ] && [ "$e" != "$3" ] && ! in_list "$base" "$e" && ! in_list "$new" "$e" && new="$new${new:+:}$e"
+    done
+    IFS=$IFS0
+    if [ -z "$new" ]; then rm -f "$f"; rmdir "$(dirname "$f")" 2>/dev/null || true; return 0; fi
+    mkdir -p "$(dirname "$f")"
+    printf '[Service]\n# MPC addins (mpc-addin-installer). systemd replaces LD_PRELOAD, so this repeats the base list from\n# the unit, then the addins. Edit with install.sh / uninstall.sh, which rebuild it when the base changes.\n# base: %s\nEnvironment=LD_PRELOAD=%s\n' \
+        "$base" "$base${base:+:}$new" > "$f.new"
+    mv "$f.new" "$f"
+}
+
+edits_in_place() { [ -n "$2" ] && [ "$2" != "$(ours "$1")" ] && writable "$2"; }   # service unit
+
 preload_add() {   # service unit so
-    if [ -n "$2" ]; then
-        bak="$2.bak-mpc-addins"   # the first edit of a file not ours keeps a backup; the shared drop-in needs none
-        [ "$(basename "$2")" = "$DROPIN_NAME" ] || [ -f "$bak" ] || cp "$2" "$bak"
+    if edits_in_place "$1" "$2"; then
+        bak="$2.bak-mpc-addins"   # the first edit keeps a backup
+        [ -f "$bak" ] || cp "$2" "$bak"
         cp "$2" "$2.prev"
         edit_preload "$2" add "$3"
         grep -qF "$3" "$2" || { mv "$2.prev" "$2"; echo "error: editing $2 failed; restored" >&2; exit 1; }
         rm -f "$2.prev"
     else
-        d="$SYSTEMD_ROOT/etc/systemd/system/$1.service.d"
-        mkdir -p "$d"
-        printf '[Service]\nEnvironment=LD_PRELOAD=%s\n' "$3" > "$d/$DROPIN_NAME.new"
-        mv "$d/$DROPIN_NAME.new" "$d/$DROPIN_NAME"
+        sync_ours "$1" "$3" ""
+        grep -qF "$3" "$(ours "$1")" || { echo "error: writing $(ours "$1") failed" >&2; exit 1; }
     fi
 }
 
-preload_remove() {   # service so: take so out of every LD_PRELOAD; the shared drop-in goes once it preloads nothing
+preload_remove() {   # service so: out of every writable file that lists it, then out of the shared drop-in
+    o=$(ours "$1")
     for d in $UNIT_DIRS; do
         for f in "$SYSTEMD_ROOT$d/$1.service" "$SYSTEMD_ROOT$d/$1.service.d/"*.conf; do
-            [ -f "$f" ] && grep -qF "$2" "$f" || continue
-            edit_preload "$f" remove "$2"
-            if [ "$(basename "$f")" = "$DROPIN_NAME" ] && ! grep -q 'LD_PRELOAD=' "$f"; then rm -f "$f"; fi
+            [ -f "$f" ] && [ "$f" != "$o" ] && grep -qF "$2" "$f" || continue
+            if writable "$f"; then edit_preload "$f" remove "$2"; else echo "warning: $f lists $2 but is read-only" >&2; fi
         done
     done
+    [ ! -f "$o" ] || sync_ours "$1" "" "$2"
 }
 
 # addin.manifest, next to install.sh: shell assignments, checked before anything uses them.

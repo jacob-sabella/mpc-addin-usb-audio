@@ -3,8 +3,9 @@
 # the unpacked folder:   sh install.sh [-y] [-n] [-t <folder>]
 # Copies the addin's files into <folder> (default /data/mpc-addins/<id>), adds its .so to the LD_PRELOAD of MPC's
 # systemd service, and restarts MPC. LD_PRELOAD is extended, never replaced: other addins already in it stay. Where
-# the service already sets it, the line that takes effect is edited in place (a backup is kept); a second
-# Environment=LD_PRELOAD= would replace the whole list. Otherwise one drop-in shared by every addin sets it.
+# a writable file sets it, the line that takes effect is edited in place (a backup is kept). Otherwise (nothing
+# sets it, or the unit is on a read-only root) one drop-in shared by every addin sets it: the unit's list, then
+# the addins.
 #   -y  don't ask   -n  don't restart MPC (the addin starts with MPC's next start)
 # mpc-addin-installer: identical in every addin.
 set -e
@@ -33,8 +34,8 @@ SVC=$(mpc_service)
 UNIT=$(unit_with_preload "$SVC")
 echo "Installing $ADDIN_NAME:"
 echo "  $DIR/"
-if [ -n "$UNIT" ]; then echo "  LD_PRELOAD in $UNIT gains $ADDIN_SO (a backup is kept)"
-else echo "  a drop-in sets LD_PRELOAD for $SVC"; fi
+if edits_in_place "$SVC" "$UNIT"; then echo "  LD_PRELOAD in $UNIT gains $ADDIN_SO (a backup is kept)"
+else echo "  $(ours "$SVC") sets LD_PRELOAD: ${UNIT:+the list from $UNIT, then }the addins"; fi
 if [ $RESTART = 1 ]; then echo "  then MPC restarts: save your project first"; fi
 if [ $YES = 0 ]; then
     printf "Continue? [y/N] "; read -r ok
