@@ -12,7 +12,7 @@ file offsets/virtual addresses in that build of `MPC` (PIE, text loaded at 0).
 
 ## Verdict
 
-**Feasible as a pure userspace LD_PRELOAD add-in. No kernel change, no root-fs change and no binary
+**Feasible as a pure userspace LD_PRELOAD addin. No kernel change, no root-fs change and no binary
 patch are needed.** Every kernel piece is built in, MPC already creates the USB gadget through
 libusbgx (which a preload can hook), MPC's audio goes through dynamically linked libasound with
 `snd_pcm_writei`/`snd_pcm_readi`, and the kernel's UAC2 gadget has the pitch controls needed for
@@ -24,7 +24,7 @@ forwarder, but only for its controller ("computer") mode, where the standalone e
 | USB device controller present | yes: `ff580000.usb` (DWC2, dual role, high speed) | 1 |
 | configfs gadget + `f_uac2` + `u_audio` | yes, all built in (`=y`), no modules needed | 1 |
 | What is on the device port today | gadget `standalone`, one function `midi.midi`, created by MPC itself | 2 |
-| Can an add-in add a function MPC won't wipe | yes, by hooking MPC's own `usbg_enable_gadget` call | 2, 3 |
+| Can an addin add a function MPC won't wipe | yes, by hooking MPC's own `usbg_enable_gadget` call | 2, 3 |
 | MPC's audio path | JUCE ALSA, `libasound.so.2` is DT_NEEDED, `hw:` card `ACVR`, S32_LE, 2 ch, 44100 Hz, period 128, RW_INTERLEAVED | 4 |
 | Where to tap / inject | `snd_pcm_writei` (main out), `snd_pcm_readi` (inputs) | 5 |
 | Clock drift | handled by the gadget's "Playback/Capture Pitch 1000000" controls, the same method MPC's own forwarder uses; no resampler | 6 |
@@ -37,11 +37,11 @@ forwarder, but only for its controller ("computer") mode, where the standalone e
 Two readings were considered:
 
 1. **The MPC acts as a USB audio interface for a computer** (device port). Not available in
-   standalone mode today; the port only carries MIDI. This is what the add-in builds.
+   standalone mode today; the port only carries MIDI. This is what the addin builds.
 2. **Better support for class-compliant interfaces plugged into the MPC** (host ports). The kernel
    already has `CONFIG_SND_USB_AUDIO=y`, and MPC already enumerates ALSA cards and has format and
    access-mode handling for external devices (strings at `MPC.strings` near "Error: Read/Write Stereo
-   Interleaved access may not be supported"). A preload add-in has little to add there, and the user
+   Interleaved access may not be supported"). An addin has little to add there, and the user
    explicitly described the device-port behaviour.
 
 Reading 1 is both the requested feature and the feasible one, so the goal is unchanged.
@@ -73,7 +73,7 @@ CONFIG_USB_CONFIGFS_MASS_STORAGE=y
 - Boot log: `dwc2 ff580000.usb: EPs: 10, dedicated fifos, 972 entries in SPRAM`.
 - The kernel tree has a vendor variant of f_uac2 (`CONFIG_USB_CONFIGFS_F_UAC2_AZ01`), which is
   **off** in this build; the upstream f_uac2 is what is available. Other firmware builds might
-  enable the variant instead. The add-in treats every attribute beyond channel mask, rate and sample
+  enable the variant instead. The addin treats every attribute beyond channel mask, rate and sample
   size as optional, so it works with either.
 - `/lib/modules` has nothing relevant to load; everything needed is `=y`.
 
@@ -170,11 +170,11 @@ setting: USBAudioIOConfiguration (MPC.settings value "24"); UI string "USB I/O S
 
 The UI text says controller mode "will disable the standalone functionality". So the firmware can
 already be a USB audio interface, but only as a front end for desktop software, with the standalone
-engine off. The add-in brings the same kind of gadget to standalone mode. Notes on that design:
+engine off. The addin brings the same kind of gadget to standalone mode. Notes on that design:
 
 - Some attribute names MPC writes (`named_channels`, `shared_clock`, `explicit_feedback`) are not in
   upstream f_uac2. They belong to the vendor variant that is off in this kernel, so those writes
-  presumably fail there. The add-in only writes upstream attributes.
+  presumably fail there. The addin only writes upstream attributes.
 - MPC's audio-device enumeration skips the gadget card: at `0x1f822ec..0x1f82368` it reads each
   card's longname (`snd_ctl_card_info_get_longname`), compares it against "UAC2_Gadget" (string ref
   at `0x1f82324`) and only adds non-matching cards to its device map. So a UAC2 gadget card that
@@ -223,7 +223,7 @@ shims (`libforce_cursor.so`, `mpc_midi_inject.so`) already work this way in the 
 
 The audio-thread work is a format conversion of 128 x 2 samples into or out of a single-producer,
 single-consumer ring: no locks, no allocation, no syscalls. The gadget's ALSA PCMs are serviced by
-the add-in's own forwarder thread (SCHED_OTHER, all signals blocked, `O_CLOEXEC`/libasound defaults).
+the addin's own forwarder thread (SCHED_OTHER, all signals blocked, `O_CLOEXEC`/libasound defaults).
 It is started lazily from the gadget hook, never from the constructor.
 
 The ALSA card is used, not FunctionFS or raw endpoints. f_uac2 does the isochronous scheduling and
@@ -246,7 +246,7 @@ u_audio (the f_uac2 back end) exposes two ALSA controls on the gadget card:
 
 The range is roughly -25% / +`fb_max` per mille. That is far wider than any crystal error.
 
-The add-in measures the queued frames on each side (ring fill plus gadget PCM delay), smooths them,
+The addin measures the queued frames on each side (ring fill plus gadget PCM delay), smooths them,
 and a PI controller steers the matching pitch control so the queue holds its target. Codec-side
 timing is never touched, and nothing is resampled. MPC's own controller-mode forwarder uses this
 method ("update play rate: pitch=%ld += %d", plus the rewind/forward strings for coarse
@@ -280,7 +280,7 @@ CPU:
   1 to 2% of one non-isolated core (CPU 0/1).
 - USB interrupts: with `p_hs_bint=c_hs_bint=4` (1 ms), roughly 3 x 1000 isochronous completions/s
   on the threaded DWC2 IRQ (CPU 1). With the kernel default of 1 (125 us) it would be about
-  3 x 8000/s, which is why the add-in sets 4. To be measured (DEVICE_TEST step 5).
+  3 x 8000/s, which is why the addin sets 4. To be measured (DEVICE_TEST step 5).
 - Memory: three static rings of 256 KiB (MPC runs mlocked).
 
 ## 8. Channel layout
@@ -288,7 +288,7 @@ CPU:
 - The tap sees only what MPC writes to the codec PCM: 2 channels on this model. MPC's
   per-track/per-pad output routing beyond the physical outputs never reaches ALSA, so
   "individual outputs" means the outputs the hardware has (more on models whose codec PCM has more
-  channels; the add-in uses whatever `hw_params` reports).
+  channels; the addin uses whatever `hw_params` reports).
 - The default USB layout to the computer is 4 channels: main out L/R and MPC inputs L/R. From the
   computer it is 2 channels, summed into MPC inputs 1/2. Both are configurable (`to_host`,
   `to_mpc_in`, `input_mode = sum | replace | off`).
@@ -300,21 +300,21 @@ CPU:
 
 1. **Bind order and FIFOs.** Adding a third and fourth IN endpoint to a DWC2 with fixed per-endpoint
    TX FIFO sizes. Controller mode proves UAC2 works on this UDC, but not this exact combination.
-   DEVICE_TEST step 1 checks enumeration before the add-in is involved.
+   DEVICE_TEST step 1 checks enumeration before the addin is involved.
 2. **MPC's reaction to a new gadget ALSA card in standalone mode.** The longname filter (section 3)
    suggests it is ignored. Needs to be confirmed: MPC must keep the codec, and must not open the
    gadget PCMs itself (`/proc/asound/cardN/pcm*/sub0/status` owner_pid).
-3. **Composite descriptors on Windows.** UAC2 uses an IAD, so the add-in sets the device class to
+3. **Composite descriptors on Windows.** UAC2 uses an IAD, so the addin sets the device class to
    EF/02/01 (`iad_class=1`). Windows may have cached the MIDI-only descriptor set for 09e8:0057 and
    may need the device removed once in Device Manager. macOS and Linux should simply re-enumerate.
-4. **Forwarder at SCHED_OTHER.** The house rule keeps add-in threads non-realtime. The 256-frame
+4. **Forwarder at SCHED_OTHER.** The house rule keeps addin threads non-realtime. The 256-frame
    ring target is sized for that. If the USB side underruns under heavy UI load, the trade-off is a
    larger `target_frames` (more latency), never a glitch on MPC's own outputs (MPC's thread never
    waits on the forwarder).
 5. **Drive mode and controller mode.** MPC may rebuild `standalone` with other functions (USB drive
-   mode), and controller mode uses `smexstream`. The add-in only adds to a gadget named `standalone`,
+   mode), and controller mode uses `smexstream`. The addin only adds to a gadget named `standalone`,
    and the forwarder only runs while its own `uac2.<inst>` function exists. Both modes must be
    exercised once.
-6. **Firmware versions.** Section 2 offsets are for this build. The add-in uses symbol hooks only
+6. **Firmware versions.** Section 2 offsets are for this build. The addin uses symbol hooks only
    (libusbgx and libasound exports), no offsets. It needs only the call order "create gadget, then
    `usbg_enable_gadget`", which any libusbgx user has.

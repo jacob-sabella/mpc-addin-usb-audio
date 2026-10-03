@@ -30,7 +30,7 @@ Keep the output. It is what every revert below gets checked against.
 ## 1. Enumeration with a hand-made UAC2 function (MPC keeps running)
 
 This checks risk 1 (DWC2 endpoints and FIFOs) and the host's view of the composite device, with no
-add-in involved. It touches MPC's live gadget: while the UDC is unbound, the computer loses the
+addin involved. It touches MPC's live gadget: while the UDC is unbound, the computer loses the
 MPC's USB MIDI port for about a second. MPC's own MIDI gadget card on the device is rebuilt on
 rebind, and MPC may not reopen it, so plan on step 1e (an MPC restart) to get USB MIDI back.
 
@@ -96,9 +96,25 @@ Then rerun step 0 and compare.
 
 Stop here if the bind fails or the host does not enumerate audio. Try once more with
 `p_hs_bint=1`/`c_hs_bint=1`, and with `c_chmask=0` (playback to the computer only). Record what
-happened in the notes. The add-in cannot work around a UDC that will not bind the function.
+happened in the notes. The addin cannot work around a UDC that will not bind the function.
 
-## 2. Install the add-in (one MPC restart)
+### Step 1 result (2026-10-02, MPC Key 37, firmware 3.9.1.2, kernel 6.18 PREEMPT_RT, Linux host)
+
+- Every attribute in 1a exists on this kernel (no skips). The bind succeeded, the UDC came back `configured`,
+  `high-speed`, and a `UAC2Gadget` card appeared on the device.
+- The host enumerated a composite device: class EF/02/01, 5 interfaces (MIDI streaming, audio control, two audio
+  streaming), `wMaxPacketSize` 720 bytes (4 ch x 4 B x 45 frames) out and 360 bytes (2 ch) in, `bInterval` 4.
+  The MIDI ports were still listed.
+- `arecord` 4 ch and `aplay` 2 ch, S32_LE 44.1 kHz, 5 s each: no errors, exactly 220500 frames recorded.
+- End to end: a 1 kHz / 500 Hz tone played into `hw:CARD=UAC2Gadget` on the device (a small dlopen-libasound
+  player; the device has no `aplay`) was recorded on the host at the level and frequencies sent, on all 4 channels.
+- MPC did not open the gadget PCMs (`closed`) and kept playing through the codec (ACVR `RUNNING`).
+- Reverted by hand (1e, no MPC restart): the gadget, the cards and the host's view matched step 0. As warned
+  above, MPC's sequencer ports for `f_midi-0/1` lost their connections at the rebind, so USB MIDI to and from the
+  computer stays down until MPC restarts. The addin itself avoids this: it adds the function before MPC's own
+  first enable, so there is no rebind.
+
+## 2. Install the addin (one MPC restart)
 
 Build on the workstation: `tools/build_armhf.sh`, which gives `build/armhf/libmpc_usb_audio.so`.
 
@@ -117,9 +133,9 @@ cd /data/mpc-usb-audio && mv libmpc_usb_audio.so.new libmpc_usb_audio.so && mv u
 For the first boot, set `test_tone=1` in `usbaudio.conf`:
 the computer then records a 1 kHz tone, which proves the USB path without MPC's audio.
 
-2b. Add a systemd drop-in that appends the add-in to MPC's existing `LD_PRELOAD`. A drop-in's
+2b. Add a systemd drop-in that appends the addin to MPC's existing `LD_PRELOAD`. A drop-in's
 `Environment=LD_PRELOAD=...` replaces the unit's value, so it must repeat what step 0 printed, with
-the add-in last:
+the addin last:
 
 ```sh
 CUR=$(systemctl show $SVC -p Environment | tr ' ' '\n' | sed -n 's/^.*LD_PRELOAD=//p')
@@ -159,21 +175,21 @@ playing a sequence. Channels 1-2 are the main out and 3-4 are MPC's inputs.
 rm /etc/systemd/system/$SVC.service.d/usb-audio.conf
 rmdir /etc/systemd/system/$SVC.service.d 2>/dev/null
 systemctl daemon-reload
-systemctl restart $SVC          # MPC rebuilds the MIDI-only gadget without the add-in
+systemctl restart $SVC          # MPC rebuilds the MIDI-only gadget without the addin
 rm -r /data/mpc-usb-audio       # optional
 ```
 
 Emergency off switch without touching systemd: put `enabled=0` in `usbaudio.conf` and restart MPC.
 The library still loads, but every hook is a pass-through.
 
-## 3. MPC keeps the codec (read-only, with the add-in running)
+## 3. MPC keeps the codec (read-only, with the addin running)
 
 ```sh
 for s in /proc/asound/card*/pcm*/sub0/status; do echo "$s"; grep -E 'state|owner_pid' "$s"; done
 ```
 
 The codec PCMs are owned by MPC's pid. The gadget card's PCMs are owned by the same pid too, but
-opened by the add-in's forwarder; check that the MPC audio preferences still show the built-in
+opened by the addin's forwarder; check that the MPC audio preferences still show the built-in
 interface. Also check MPC's audio-device menu does not list "UAC2_Gadget".
 
 ## 4. Computer to MPC, and drift (no device changes)
@@ -203,8 +219,8 @@ heavily (many plugins or tracks) and check the log for overflow and underrun cou
 
 - Controller (computer) mode: MPC switches to its own `smexstream` gadget. The log should say
   `gadget 'smexstream' enabled: not ours, left alone`, and MPC's own USB audio must work as before.
-- USB drive mode: check what gadget MPC builds (`ls $G/functions`). If the add-in's function is
+- USB drive mode: check what gadget MPC builds (`ls $G/functions`). If the addin's function is
   present, check the drive still mounts on the computer.
-- Coming back to standalone mode, the add-in's function reappears (log: `uac2.usbaudio added`).
+- Coming back to standalone mode, the addin's function reappears (log: `uac2.usbaudio added`).
 
 Record every result, with the date, in the project notes.

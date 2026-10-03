@@ -20,7 +20,7 @@ typedef struct {
 } mpcua_stream;
 
 typedef struct {
-  int active;               /* process is MPC and the add-in is enabled */
+  int active;               /* process is MPC and the addin is enabled */
   mpcua_cfg cfg;
   mpcua_alsa alsa;
   int alsa_ok;

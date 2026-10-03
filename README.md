@@ -1,6 +1,6 @@
-# mpc-preload-addin-usb-audio
+# mpc-addin-usb-audio
 
-An `LD_PRELOAD` add-in for Akai MPC OS standalone devices that makes the MPC act as a
+An `LD_PRELOAD` addin for Akai MPC OS standalone devices that makes the MPC act as a
 class-compliant USB audio interface on its USB device port, alongside its existing USB MIDI port:
 
 - The computer gets a **recording device** carrying MPC's main out, plus MPC's inputs (4 channels by
@@ -17,7 +17,7 @@ passes the offline tests. `docs/DEVICE_TEST.md` is the proposed hardware test pl
 
 ## How it works
 
-1. MPC builds its standalone USB gadget (USB MIDI) with libusbgx at every start. The add-in hooks
+1. MPC builds its standalone USB gadget (USB MIDI) with libusbgx at every start. The addin hooks
    `usbg_enable_gadget` and, just before the gadget is bound, adds a `uac2` function to it with
    MPC's own libusbgx handles. MPC's normal teardown therefore removes it too.
 2. It hooks `snd_pcm_open`/`hw_params`/`close` to recognise MPC's playback and capture streams on
@@ -29,9 +29,9 @@ passes the offline tests. `docs/DEVICE_TEST.md` is the proposed hardware test pl
    the gadget's ALSA card. It steers the gadget's "Playback/Capture Pitch" controls with a PI loop,
    so the USB clock follows MPC's codec clock without resampling.
 
-The add-in does nothing unless the process is `/usr/bin/MPC`. In any other process (the launcher
+The addin does nothing unless the process is `/usr/bin/MPC`. In any other process (the launcher
 scripts that share the environment, for example) every hook is a plain pass-through. The worst case
-on the USB side is a dropout heard on the computer. MPC's audio thread never waits on the add-in.
+on the USB side is a dropout heard on the computer. MPC's audio thread never waits on the addin.
 
 Latency is about 8-12 ms each way at the default `target_frames=256` and 44.1 kHz.
 
@@ -89,7 +89,7 @@ The log is `/data/mpc-usb-audio/usbaudio.log`, with a stats line every 10 s.
 ## Limits
 
 - The USB rate is fixed when MPC starts and must equal MPC's codec rate (44.1 kHz by default).
-  When MPC runs at another rate, the add-in logs it and stays idle.
+  When MPC runs at another rate, the addin logs it and stays idle.
 - The computer sees MPC's main out as it goes to the codec. Per-track outputs exist only as far as
   MPC routes them to codec outputs (`out3`... on devices with more than two outputs).
 - Not active in MPC's controller (computer) mode. MPC provides its own USB audio there.

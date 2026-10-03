@@ -2,7 +2,7 @@
  *
  * One thread writes, one thread reads, no locks, no allocation, no syscalls. Safe to use from MPC's
  * audio thread. Indices are free-running uint32 counters (wrap is harmless while capacity is a power
- * of two <= 2^30). Storage is supplied by the caller (static buffers in the add-in).
+ * of two <= 2^30). Storage is supplied by the caller (static buffers in the addin).
  *
  * Frames are written and read whole: callers pass sample counts that are multiples of the channel
  * count, and the ring never splits a write.

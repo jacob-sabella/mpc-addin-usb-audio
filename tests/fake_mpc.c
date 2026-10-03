@@ -1,5 +1,5 @@
-/* fake_mpc.c: stands in for /usr/bin/MPC (the binary must be named MPC for the add-in to activate).
- * Drives the preloaded add-in through the same calls MPC makes and checks what it does.
+/* fake_mpc.c: stands in for /usr/bin/MPC (the binary must be named MPC for the addin to activate).
+ * Drives the preloaded addin through the same calls MPC makes and checks what it does.
  * Usage: MPC <configfs-root> [expect-inactive] */
 #ifndef _GNU_SOURCE
 #define _GNU_SOURCE

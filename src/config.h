@@ -1,4 +1,4 @@
-/* config.h: add-in settings, read once from a key=value file (default
+/* config.h: addin settings, read once from a key=value file (default
  * /data/mpc-usb-audio/usbaudio.conf, or $MPC_USB_AUDIO_CONF). A missing file means defaults. */
 #ifndef MPCUA_CONFIG_H
 #define MPCUA_CONFIG_H

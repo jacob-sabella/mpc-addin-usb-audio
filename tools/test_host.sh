@@ -1,6 +1,6 @@
 #!/bin/sh
 # Offline x86 host tests, all under ASan + UBSan. Run from anywhere; nothing touches a device.
-#   tools/test_host.sh          unit tests + add-in integration test
+#   tools/test_host.sh          unit tests + addin integration test
 #   TSAN=1 tools/test_host.sh   also run the ring stress test under ThreadSanitizer
 set -eu
 cd "$(dirname "$0")/.."
@@ -21,7 +21,7 @@ if [ "${TSAN:-0}" = 1 ]; then
   "$B/t_ring_tsan"
 fi
 
-# Integration: fake libasound/libusbgx, the add-in preloaded, a test binary named MPC.
+# Integration: fake libasound/libusbgx, the addin preloaded, a test binary named MPC.
 $CC $CF $SAN -fPIC -shared tests/fake_libs.c -o "$B/libfake.so"
 $CC $CF $SAN -fPIC -shared -fvisibility=hidden -DMPCUA_TEST_HOOKS -pthread \
   src/addin.c src/fwd.c src/alsa_api.c src/log.c $CORE -ldl -lm -o "$B/libmpc_usb_audio.so"
@@ -47,6 +47,6 @@ run "$B/bin/MPC" "$tmp/cfs" || { cat "$tmp/usbaudio.log" 2>/dev/null; exit 1; }
 run "$B/bin/not-mpc" "$tmp/cfs" inert
 # Preloaded into an unrelated program, the library must stay out of the way.
 run /bin/true
-echo "--- add-in log"
+echo "--- addin log"
 cat "$tmp/usbaudio.log"
 echo "all host tests passed"

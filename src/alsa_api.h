@@ -1,4 +1,4 @@
-/* alsa_api.h: the slice of the libasound ABI the add-in uses, declared by hand (no ALSA headers
+/* alsa_api.h: the slice of the libasound ABI the addin uses, declared by hand (no ALSA headers
  * needed to build). Everything is resolved with dlsym(RTLD_NEXT) from MPC's already-loaded
  * libasound.so.2, which gives the default (current) symbol versions. */
 #ifndef MPCUA_ALSA_API_H

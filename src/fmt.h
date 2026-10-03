@@ -1,7 +1,7 @@
 /* fmt.h: PCM sample formats seen on MPC hardware, converted to and from left-justified int32.
  *
- * Internal sample format everywhere in the add-in is int32 full scale (S32_LE semantics), which is
- * what MPC writes to the codec on current models. Other formats are handled so the add-in does not
+ * Internal sample format everywhere in the addin is int32 full scale (S32_LE semantics), which is
+ * what MPC writes to the codec on current models. Other formats are handled so the addin does not
  * silently misbehave on hardware that opens the codec differently.
  */
 #ifndef MPCUA_FMT_H

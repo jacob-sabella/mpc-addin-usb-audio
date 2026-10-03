@@ -1,4 +1,4 @@
-/* fwd.c: the forwarder thread. Moves audio between the add-in's rings and the UAC2 gadget's ALSA
+/* fwd.c: the forwarder thread. Moves audio between the addin's rings and the UAC2 gadget's ALSA
  * card, and steers the gadget's pitch controls so both queues hold their target fill.
  *
  * Runs at SCHED_OTHER with every signal blocked. It never takes a lock the audio thread could

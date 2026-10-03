@@ -1,6 +1,6 @@
 /* fake_libs.c: just enough of libasound and libusbgx for the host integration test. The fake MPC
- * links against this; the add-in, preloaded in front, interposes and calls through with
- * dlsym(RTLD_NEXT). Only a subset of ALSA is provided, so the add-in's forwarder stays off and the
+ * links against this; the addin, preloaded in front, interposes and calls through with
+ * dlsym(RTLD_NEXT). Only a subset of ALSA is provided, so the addin's forwarder stays off and the
  * test drives the rings through the MPCUA_TEST_HOOKS helpers. */
 #ifndef _GNU_SOURCE
 #define _GNU_SOURCE
