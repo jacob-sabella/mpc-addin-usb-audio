@@ -1,4 +1,4 @@
-# Read by install.sh and uninstall.sh (mpc-addin-installer). See that repo's README for the fields.
+# This addin, for the shared installer in mpc-vst-plugins (tools/release/addin; the keys are in its docs/ADDINS.md).
 ADDIN_ID=usb-audio
 ADDIN_NAME="MPC USB audio addin"
 ADDIN_SO=libmpc_usb_audio.so

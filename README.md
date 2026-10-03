@@ -64,17 +64,22 @@ time from what MPC has already loaded.
 
 ## Install
 
-Needs root on the device (SSH). `tools/build_armhf.sh` builds `build/package/`: copy that folder to the device
-and run, as root, in it:
+Needs root on the device (SSH). Unzip a release (`MPC-USB-audio-addin-<version>-mpc-armv7.zip`) on the device and
+run, as root, in its folder:
 
 ```sh
 sh install.sh            # asks first; -y doesn't ask, -n doesn't restart MPC, -t <folder> installs elsewhere
-sh uninstall.sh
+sh /data/mpc-addins/usb-audio/uninstall.sh   # later, to remove it
 ```
 
 It installs into `/data/mpc-addins/usb-audio/` and **adds** the library to `LD_PRELOAD` in MPC's systemd service;
-other addins and libraries already in it stay. Reinstalling keeps your `usbaudio.conf`. The scripts are the shared
-[mpc-addin-installer](../mpc-addin-installer) (identical in every addin; `addin.manifest` describes this one). For a
+other addins and libraries already in it stay. Reinstalling keeps your `usbaudio.conf`. The scripts are the shared addin
+installer from [mpc-vst-plugins](https://github.com/sd88me/mpc-vst-plugins) (`tools/release/addin`, `docs/ADDINS.md`;
+identical in every addin, `addin.manifest` describes this one). The catalog's `mpc-store.sh` and desktop app install
+it too.
+
+To build a release: `tools/build_armhf.sh`, then `tools/release.sh <version>` (needs mpc-vst-plugins next to this
+repo, or `MPC_VST=/path`): `dist/MPC-USB-audio-addin-<version>-mpc-armv7.zip`, checked as the catalog checks it. For a
 quick off switch without uninstalling, put `enabled=0` in `usbaudio.conf` and restart MPC.
 
 ## Configuration

@@ -3,7 +3,7 @@
 # container, then check the result: no symbol newer than GLIBC_2.31, and no DT_NEEDED on libasound
 # or libusbgx (both are resolved at run time from what MPC already loaded).
 # Needs Docker with arm/v7 emulation (qemu-user binfmt). Output: build/armhf/libmpc_usb_audio.so, and build/package/
-# (the .so, the default usbaudio.conf and the installer) to copy to a device.
+# (the .so, the default usbaudio.conf and addin.manifest) for tools/release.sh.
 set -eu
 cd "$(dirname "$0")/.."
 IMAGE=${IMAGE:-arm32v7/gcc:11-bullseye}
@@ -36,9 +36,9 @@ if [ -n "$unexpected" ]; then echo "FAIL: unexpected exports: $unexpected" >&2; 
 ls -l "$OUT/libmpc_usb_audio.so"
 echo "armhf build OK"
 
-# The package: what to copy to the device and run install.sh in (mpc-addin-installer).
+# The package: the addin's files, which tools/release.sh turns into the release zip (with the installer).
 P=build/package
 rm -rf "$P"; mkdir -p "$P"
-cp "$OUT/libmpc_usb_audio.so" addin.manifest install.sh uninstall.sh addin-lib.sh "$P/"
+cp "$OUT/libmpc_usb_audio.so" addin.manifest "$P/"
 cp etc/usbaudio.conf.example "$P/usbaudio.conf"
 echo "package: $P/"; ls "$P"

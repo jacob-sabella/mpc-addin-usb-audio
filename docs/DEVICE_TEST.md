@@ -136,7 +136,7 @@ cd /data/mpc-addins-usb-audio-pkg && sh install.sh -n
 systemctl show $SVC -p Environment -p DropInPaths
 ```
 
-The installer (mpc-addin-installer) copies the files into `/data/mpc-addins/usb-audio/` and adds the library
+The installer (now mpc-vst-plugins' `tools/release/addin`) copies the files into `/data/mpc-addins/usb-audio/` and adds the library
 to `LD_PRELOAD`. The unit sits on the read-only root, so the drop-in
 `/etc/systemd/system/$SVC.service.d/90-mpc-addins.conf` sets it: the unit's list (recorded as `# base:`), then
 the addins. Check that the printed `LD_PRELOAD` holds everything step 0 printed, with the addin last. `/etc`
