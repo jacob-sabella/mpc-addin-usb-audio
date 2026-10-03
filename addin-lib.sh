@@ -22,7 +22,10 @@ mpc_service() {
 }
 
 ours() { echo "$SYSTEMD_ROOT/etc/systemd/system/$1.service.d/$DROPIN_NAME"; }   # service
-writable() { [ -w "$1" ] && [ -w "$(dirname "$1")" ]; }   # false on a read-only mount, as root too
+writable() {   # file: can it be replaced? A probe file, since busybox's [ -w ] says yes to root on a read-only mount
+    w="$(dirname "$1")/.mpc-addins-probe.$$"
+    [ -w "$1" ] && (: > "$w") 2>/dev/null && rm -f "$w"
+}
 
 # The unit file or drop-in whose Environment= line sets LD_PRELOAD and wins (the last one systemd reads), if any;
 # a second argument leaves that file out.
