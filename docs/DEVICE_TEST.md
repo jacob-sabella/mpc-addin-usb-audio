@@ -242,3 +242,23 @@ Installed with `sh install.sh -n` from the package, then MPC restarted. **Passed
   log at that point had no tap counters to tell. Hence the `tapped:` line.
 
 The addin is left installed on the device. Remove it with `sh uninstall.sh` from the package folder.
+
+### PipeWire on a Linux computer (2026-10-02)
+
+Dropouts of about 25% (silent runs every PipeWire cycle) were heard through a PipeWire loopback. They are on the
+computer's side, not in the addin:
+
+- `arecord` straight from the device is gap-free. A timing probe (period 64) read 132 frames every 3.00 ms,
+  44,100.0 frames/s, with arrival jitter of 2 frames and no xruns. The first audio arrives about 4.8 ms after a
+  start, which is normal for USB.
+- The gaps appear when the MPC's PipeWire node follows another device's clock (here the computer's own USB
+  interface, at quantum 256): the PipeWire log shows `follower delay:0 target:300 thr:236 ... resync` about
+  190 times a second, each resync dropping and restarting the stream. Forcing the graph to 44.1 kHz didn't
+  change it. A webcam microphone in the same position failed the same way (543 errors, 1,105 dropouts in
+  6 s), so it isn't specific to this device.
+- `hs_bint=1` (125 µs packets) didn't change it either; the computer still collects the audio in 3 ms chunks.
+  `hs_bint` stays at 4.
+- Clean: the MPC's node as its own clock; and once, the Pro Audio profile (IRQ scheduling) as a follower, though
+  a later loopback through it still had gaps.
+- For monitoring on such a computer, `arecord -D hw:CARD=<card> ... | aplay -D pipewire` (with buffers of
+  100-150 ms) is gap-free.
