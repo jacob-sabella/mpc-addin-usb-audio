@@ -12,8 +12,9 @@ It works with the drivers built into Linux, macOS and Windows 10/11 (USB Audio C
 kernel's UAC2 gadget function does the USB work. No kernel, root filesystem or MPC binary changes
 are needed.
 
-**Status: not yet run on a device.** The design is backed by `docs/FEASIBILITY.md`, and the code
-passes the offline tests. `docs/DEVICE_TEST.md` is the proposed hardware test plan.
+**Status: runs on hardware.** Enumeration and the MPC-to-computer path are verified (`docs/DEVICE_TEST.md`,
+steps 1-2); computer-to-MPC audio, drift over time, load and the other USB modes (steps 3-6) are not yet.
+The design is backed by `docs/FEASIBILITY.md`.
 
 ## How it works
 

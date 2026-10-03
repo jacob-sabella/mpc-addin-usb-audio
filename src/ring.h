@@ -104,7 +104,7 @@ static inline uint32_t mpcua_ring_read_frames(mpcua_ring *q, int32_t *dst, uint3
   return frames;
 }
 
-/* Consumer: drop samples so that at most `keep` remain (rounded down to whole frames). */
+/* Consumer: drop samples so that at most `keep_frames` whole frames remain. */
 static inline void mpcua_ring_trim(mpcua_ring *q, uint32_t keep_frames, uint32_t ch) {
   uint32_t fill = mpcua_ring_fill(q), keep = keep_frames * ch;
   if (fill > keep) {

@@ -1,7 +1,7 @@
-# On-device test plan (proposed, needs approval)
+# On-device test plan and results
 
-Nothing here has been run. Every step below changes device state, so each one needs the owner's
-go-ahead first. The steps are ordered so each risk from `docs/FEASIBILITY.md` section 9 is settled
+Every step below changes device state, so each one needs the owner's go-ahead first. Steps 1 and 2
+passed (2026-10-02); steps 3-6 are open. The steps are ordered so each risk from `docs/FEASIBILITY.md` section 9 is settled
 before the next step depends on it. Steps 0 and 3 only read.
 
 Conventions:
@@ -136,7 +136,7 @@ cd /data/mpc-addins-usb-audio-pkg && sh install.sh -n
 systemctl show $SVC -p Environment -p DropInPaths
 ```
 
-The installer (now mpc-vst-plugins' `tools/release/addin`) copies the files into `/data/mpc-addins/usb-audio/` and adds the library
+The installer (mpc-vst-plugins' `tools/release/addin`) copies the files into `/data/mpc-addins/usb-audio/` and adds the library
 to `LD_PRELOAD`. The unit sits on the read-only root, so the drop-in
 `/etc/systemd/system/$SVC.service.d/90-mpc-addins.conf` sets it: the unit's list (recorded as `# base:`), then
 the addins. Check that the printed `LD_PRELOAD` holds everything step 0 printed, with the addin last. `/etc`
@@ -171,6 +171,52 @@ cd /data/mpc-addins-usb-audio-pkg && sh uninstall.sh   # takes only this addin o
 
 Emergency off switch without touching systemd: put `enabled=0` in `usbaudio.conf` and restart MPC.
 The library still loads, but every hook is a pass-through.
+
+### Step 2 result (2026-10-02, MPC Key 37, firmware 3.9.1.2)
+
+Installed with `sh install.sh -n` from the package, then MPC restarted. **Passed.**
+
+- The unit (`/usr/lib/systemd/system/acvs.service`) is on the read-only root. The installer wrote
+  `90-mpc-addins.conf`, which holds the unit's two libraries and then the addin, and `systemctl show`
+  gave that list.
+- The log showed: settings read from `/data/mpc-addins/usb-audio/usbaudio.conf`; `uac2.usbaudio` added to gadget
+  'standalone'; both codec PCMs tapped (2 ch, S32_LE, 44.1 kHz, interleaved); a session on the gadget card.
+  The first time MPC started, the session came up 5 s in; another time, 16 s in, because MPC opened its
+  audio later.
+- The gadget has `midi.midi` and `uac2.usbaudio`, on the same UDC.
+- **No rebind:** `/proc/asound/seq/clients` matched the copy taken before the restart: `f_midi` was still
+  connected to MPC's client both ways, on both ports. USB MIDI kept working after every restart.
+- The forwarder thread `usbaudio-fwd` is SCHED_OTHER (policy 0, rtprio 0).
+- On the computer, the device enumerated as USB audio (4 ch in, 2 out).
+- `test_tone=1`: recorded 10 s, 4 ch at 44.1 kHz. Every channel held a 1 kHz tone at rms 0.177, with no
+  energy outside the peak and no sample steps above the tone's own (no dropouts).
+- `test_tone=0`, after a restart: notes were sent into the active drum track (a seq client playing notes
+  36-67) while the computer recorded. Channels 1-2 (main out) peaked at -11.0 / -10.3 dBFS, the same as
+  the addin's own `tapped:` line (-11.0 dBFS). Channels 3-4 (MPC's inputs, nothing plugged in) were at the
+  noise floor, about -98 dBFS. No overflows or underruns. The tap saw about 345 calls/s on each stream,
+  i.e. 44,100 frames/s at period 128.
+- Notes on empty pads record as silence; the `tapped:` log line shows whether MPC produced audio.
+
+The addin is left installed on the device. Remove it with `sh uninstall.sh` from the package folder.
+
+### PipeWire on a Linux computer (2026-10-02)
+
+Dropouts of about 25% (silent runs every PipeWire cycle) were heard through a PipeWire loopback. They are on the
+computer's side, not in the addin:
+
+- `arecord` straight from the device is gap-free. A timing probe (period 64) read 132 frames every 3.00 ms,
+  44,100.0 frames/s, with arrival jitter of 2 frames and no xruns. The first audio arrives about 4.8 ms after a
+  start, which is normal for USB.
+- The gaps appear when the MPC's PipeWire node follows another device's clock (here the computer's own USB
+  interface, at quantum 256): the PipeWire log shows `follower delay:0 target:300 thr:236 ... resync` about
+  190 times a second, each resync dropping and restarting the stream. Forcing the graph to 44.1 kHz did not
+  change it. A webcam microphone in the same position failed the same way (543 errors, 1,105 dropouts in
+  6 s), so it is not specific to this device.
+- `hs_bint=1` (125 µs packets) did not change it either; the computer still collects the audio in 3 ms chunks.
+  `hs_bint` stays at 4.
+- Clean: the MPC's node as the graph's clock. The Pro Audio profile as a follower was not reliably clean.
+- For monitoring on such a computer, `arecord -D hw:CARD=<card> ... | aplay -D pipewire` (with buffers of
+  100-150 ms) is gap-free.
 
 ## 3. MPC keeps the codec (read-only, with the addin running)
 
@@ -213,52 +259,4 @@ heavily (many plugins or tracks) and check the log for overflow and underrun cou
   present, check the drive still mounts on the computer.
 - Coming back to standalone mode, the addin's function reappears (log: `uac2.usbaudio added`).
 
-Record every result, with the date, in the project notes.
-
-## Results: step 2 (2026-10-02, MPC Key 37, firmware 3.9.1.2)
-
-Installed with `sh install.sh -n` from the package, then MPC restarted. **Passed.**
-
-- The unit (`/usr/lib/systemd/system/acvs.service`) is on the read-only root. The installer wrote
-  `90-mpc-addins.conf`, which holds the unit's two libraries and then the addin, and `systemctl show`
-  gave that list.
-- The log showed: settings read from `/data/mpc-addins/usb-audio/usbaudio.conf`; `uac2.usbaudio` added to gadget
-  'standalone'; both codec PCMs tapped (2 ch, S32_LE, 44.1 kHz, interleaved); a session on the gadget card.
-  The first time MPC started, the session came up 5 s in; another time, 16 s in, because MPC opened its
-  audio later.
-- The gadget has `midi.midi` and `uac2.usbaudio`, on the same UDC.
-- **No rebind:** `/proc/asound/seq/clients` matched the copy taken before the restart: `f_midi` was still
-  connected to MPC's client both ways, on both ports. USB MIDI kept working after every restart.
-- The forwarder thread `usbaudio-fwd` is SCHED_OTHER (policy 0, rtprio 0).
-- On the computer, the device enumerated as USB audio (4 ch in, 2 out).
-- `test_tone=1`: recorded 10 s, 4 ch at 44.1 kHz. Every channel held a 1 kHz tone at rms 0.177, with no
-  energy outside the peak and no sample steps above the tone's own (no dropouts).
-- `test_tone=0`, after a restart: notes were sent into the active drum track (a seq client playing notes
-  36-67) while the computer recorded. Channels 1-2 (main out) peaked at -11.0 / -10.3 dBFS, the same as
-  the addin's own `tapped:` line (-11.0 dBFS). Channels 3-4 (MPC's inputs, nothing plugged in) were at the
-  noise floor, about -98 dBFS. No overflows or underruns. The tap saw about 345 calls/s on each stream,
-  i.e. 44,100 frames/s at period 128.
-- The first `test_tone=0` recording was silent: the notes then (48-72) mostly landed on empty pads, and the
-  log at that point had no tap counters to tell. Hence the `tapped:` line.
-
-The addin is left installed on the device. Remove it with `sh uninstall.sh` from the package folder.
-
-### PipeWire on a Linux computer (2026-10-02)
-
-Dropouts of about 25% (silent runs every PipeWire cycle) were heard through a PipeWire loopback. They are on the
-computer's side, not in the addin:
-
-- `arecord` straight from the device is gap-free. A timing probe (period 64) read 132 frames every 3.00 ms,
-  44,100.0 frames/s, with arrival jitter of 2 frames and no xruns. The first audio arrives about 4.8 ms after a
-  start, which is normal for USB.
-- The gaps appear when the MPC's PipeWire node follows another device's clock (here the computer's own USB
-  interface, at quantum 256): the PipeWire log shows `follower delay:0 target:300 thr:236 ... resync` about
-  190 times a second, each resync dropping and restarting the stream. Forcing the graph to 44.1 kHz didn't
-  change it. A webcam microphone in the same position failed the same way (543 errors, 1,105 dropouts in
-  6 s), so it isn't specific to this device.
-- `hs_bint=1` (125 µs packets) didn't change it either; the computer still collects the audio in 3 ms chunks.
-  `hs_bint` stays at 4.
-- Clean: the MPC's node as its own clock; and once, the Pro Audio profile (IRQ scheduling) as a follower, though
-  a later loopback through it still had gaps.
-- For monitoring on such a computer, `arecord -D hw:CARD=<card> ... | aplay -D pipewire` (with buffers of
-  100-150 ms) is gap-free.
+Record every result, with the date, under its step in this file.

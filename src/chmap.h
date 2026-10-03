@@ -20,8 +20,8 @@ typedef struct { uint8_t kind; uint8_t idx; /* 0-based */ } mpcua_chsrc;
 /* Returns the number of entries parsed (1..max) or -1. `allowed` is a mask of MPCUA_SRC_* kinds. */
 int mpcua_chmap_parse(const char *spec, unsigned allowed, mpcua_chsrc *map, int max);
 
-/* Build one frame of `n` channels from one MPC out frame and one MPC in frame. Missing sources (index
- * beyond the live channel count, or a NULL frame) give silence. */
+/* Build one frame of `n` channels from an MPC out frame, an MPC in frame and a computer (host) frame.
+ * Missing sources (index beyond the live channel count, or a NULL frame) give silence. */
 void mpcua_chmap_frame(const mpcua_chsrc *map, int n, const int32_t *outf, unsigned out_ch,
                        const int32_t *inf, unsigned in_ch, const int32_t *hostf, unsigned host_ch,
                        int32_t *dst);

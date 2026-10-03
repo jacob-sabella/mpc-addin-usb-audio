@@ -1,5 +1,5 @@
 #!/bin/sh
-# Build libmpc_usb_audio.so for MPC OS (armv7 hard-float, glibc <= 2.31) in a Debian bullseye
+# Build libmpc_usb_audio.so for MPC OS (armv7 hard-float; glibc <= 2.31, the oldest supported MPC OS) in a Debian bullseye
 # container, then check the result: no symbol newer than GLIBC_2.31, and no DT_NEEDED on libasound
 # or libusbgx (both are resolved at run time from what MPC already loaded).
 # Needs Docker with arm/v7 emulation (qemu-user binfmt). Output: build/armhf/libmpc_usb_audio.so, and build/package/
@@ -28,7 +28,7 @@ if grep -Eq 'libasound|libusbgx' "$OUT/needed.txt"; then echo "FAIL: links libas
 max=$(tail -n1 "$OUT/glibc.txt")
 echo "highest symbol version: $max"
 if [ "$(printf '%s\nGLIBC_2.31\n' "$max" | sort -V | tail -n1)" != GLIBC_2.31 ]; then
-  echo "FAIL: needs $max, device glibc is 2.31" >&2; exit 1
+  echo "FAIL: needs $max; the oldest supported MPC OS has glibc 2.31" >&2; exit 1
 fi
 echo "exports:"; sed 's/^/  /' "$OUT/exports.txt"
 unexpected=$(grep -Ev '^(snd_pcm_(open|close|hw_params|writei|writen|readi|readn)|usbg_enable_gadget)$' "$OUT/exports.txt" || true)

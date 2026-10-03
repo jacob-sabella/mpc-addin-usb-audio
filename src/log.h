@@ -1,4 +1,4 @@
-/* log.h: append-only log file. NEVER call from MPC's audio thread (it does file I/O); the audio
+/* log.h: append-only log file. Never call from MPC's audio thread (it does file I/O); the audio
  * path only bumps atomic counters, which the forwarder reports. */
 #ifndef MPCUA_LOG_H
 #define MPCUA_LOG_H

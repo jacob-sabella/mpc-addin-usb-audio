@@ -179,7 +179,7 @@ engine off. The addin brings the same kind of gadget to standalone mode. Notes o
   card's longname (`snd_ctl_card_info_get_longname`), compares it against "UAC2_Gadget" (string ref
   at `0x1f82324`) and only adds non-matching cards to its device map. So a UAC2 gadget card that
   appears in standalone mode should not show up as an MPC audio device. **Inferred from the
-  disassembly; DEVICE_TEST step 3 confirms it.**
+  disassembly; DEVICE_TEST step 1d confirmed it (step 3 rechecks with the addin running).**
 
 ## 4. MPC's audio path
 

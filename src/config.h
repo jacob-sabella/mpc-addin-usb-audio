@@ -6,7 +6,7 @@
 #include <stddef.h>
 #include "chmap.h"
 
-#define MPCUA_CONF_NAME "usbaudio.conf"   /* next to the .so, unless $MPC_USB_AUDIO_CONF names one */
+#define MPCUA_CONF_NAME "usbaudio.conf"
 
 enum { MPCUA_INPUT_OFF = 0, MPCUA_INPUT_SUM = 1, MPCUA_INPUT_REPLACE = 2 };
 
