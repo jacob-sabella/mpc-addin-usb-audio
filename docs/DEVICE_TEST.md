@@ -111,8 +111,8 @@ happened in the notes. The addin cannot work around a UDC that will not bind the
 - MPC did not open the gadget PCMs (`closed`) and kept playing through the codec (ACVR `RUNNING`).
 - Reverted by hand (1e, no MPC restart): the gadget, the cards and the host's view matched step 0. As warned
   above, MPC's sequencer ports for `f_midi-0/1` lost their connections at the rebind, so USB MIDI to and from the
-  computer stays down until MPC restarts. The addin itself avoids this: it adds the function before MPC's own
-  first enable, so there is no rebind.
+  computer stays down until MPC restarts. The addin is designed to avoid this (it adds the function inside MPC's own
+  first enable, so there is no rebind); step 2 checks that.
 
 ## 2. Install the addin (one MPC restart)
 
