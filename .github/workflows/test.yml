@@ -12,7 +12,13 @@ on:
 
 jobs:
   host:
+    # Skip workflow runs from fork PRs — only repo-internal pushes / PRs run.
+    # Combined with branch-protection "Require approval for first-time
+    # contributors" / "Require approval for all outside collaborators",
+    # this means only the repo owner can trigger CI.
+    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-24.04
+    name: Linux (host)
     steps:
       - uses: actions/checkout@v4
         with: { path: mpc-addin-usb-audio }
@@ -27,7 +33,9 @@ jobs:
       - run: TSAN=1 tools/test_host.sh
         working-directory: mpc-addin-usb-audio
   armhf:
+    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
+    name: armhf (MPC OS)
     steps:
       - uses: actions/checkout@v4
       - uses: docker/setup-qemu-action@v3
