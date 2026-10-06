@@ -76,7 +76,8 @@ sh /data/mpc-addins/usb-audio/uninstall.sh   # later, to remove it
 ```
 
 It installs into `/data/mpc-addins/usb-audio/` and **adds** the library to `LD_PRELOAD` in MPC's systemd service;
-other addins and libraries already in it stay. Reinstalling keeps your `usbaudio.conf`. The scripts are the shared addin
+other addins and libraries already in it stay. Reinstalling keeps your `usbaudio.conf`. Uninstalling deletes the files
+it installed, `usbaudio.conf` included; the addin's own log, `usbaudio.log`, stays in the folder (delete it by hand). The scripts are the shared addin
 installer from [mpc-vst-plugins](https://github.com/sd88me/mpc-vst-plugins) (`tools/release/addin`, `docs/ADDINS.md`;
 identical in every addin, `addin.manifest` describes this one). The catalog's `mpc-store.sh` and desktop app install
 it too.
