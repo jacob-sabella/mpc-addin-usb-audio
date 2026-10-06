@@ -1,8 +1,7 @@
 # The offline tests on every push and pull request (host tests under the sanitizers, the installer in BusyBox) and the
 # armhf build under QEMU, which enforces the glibc floor.
 #
-# mpc-vst-plugins is pinned to the same commit as release.yml: the fork's addins branch (sd88me/mpc-vst-plugins#144,
-# the addin installer and tools) until it is upstream. Move both pins together.
+# mpc-vst-plugins is pinned to the same commit as release.yml. Move both pins together.
 name: Test
 
 on:
@@ -24,8 +23,8 @@ jobs:
         with: { path: mpc-addin-usb-audio }
       - uses: actions/checkout@v4
         with:
-          repository: jacob-sabella/mpc-vst-plugins
-          ref: 1c4b4fc5a55419c1f0df0d90ac0979ba25c953cb
+          repository: sd88me/mpc-vst-plugins
+          ref: a4b8f861d07153a2b387d7520331f532f7247502
           path: mpc-vst-plugins
       # TSan can't map its shadow memory with the runner's default 32 bits of mmap randomness
       - run: sudo sysctl -q vm.mmap_rnd_bits=28

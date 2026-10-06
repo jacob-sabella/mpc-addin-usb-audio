@@ -1,7 +1,6 @@
 # Build the addin for MPC OS and attach the zip to a DRAFT release, with mpc-vst-plugins' reusable workflow
 # (its docs/ADDINS.md, "Releasing from CI"). mpc-vst-plugins is pinned to ONE commit in both places below, the same
-# one as in test.yml: the fork's addins branch (sd88me/mpc-vst-plugins#144) until it is upstream, where the workflow
-# checks it out from (a PR's commits are fetchable there). Point both at upstream once it is in.
+# one as in test.yml.
 name: Release
 
 on:
@@ -18,12 +17,12 @@ on:
 
 jobs:
   addin:
-    uses: jacob-sabella/mpc-vst-plugins/.github/workflows/addin-release.yml@1c4b4fc5a55419c1f0df0d90ac0979ba25c953cb
+    uses: sd88me/mpc-vst-plugins/.github/workflows/addin-release.yml@a4b8f861d07153a2b387d7520331f532f7247502
     permissions: { contents: write }
     with:
       tag: usb-audio-addin-v${{ inputs.version }}
       version: ${{ inputs.version }}
-      tools_ref: 1c4b4fc5a55419c1f0df0d90ac0979ba25c953cb
+      tools_ref: a4b8f861d07153a2b387d7520331f532f7247502
       package_dir: build/package
       build: tools/build_armhf.sh
       host_test: sudo sysctl -q vm.mmap_rnd_bits=28 && TSAN=1 tools/test_host.sh
