@@ -106,6 +106,12 @@ The log is `usbaudio.log` in the addin's folder (`log=` moves or disables it), w
 - The computer sees MPC's main out as it goes to the codec. Per-track outputs exist only as far as
   MPC routes them to codec outputs (`out3`... on devices with more than two outputs).
 - Not active in MPC's controller (computer) mode. MPC provides its own USB audio there.
+- It needs MPC to build its standalone USB gadget (the USB MIDI port). Verified on the MPC Key 37. On an MPC
+  Live II (reported 2026-10-09, custom firmware) MPC builds no gadget in standalone mode, so there is nothing
+  to add USB audio to: the log says "no USB audio: after 60 s MPC has not enabled its gadget" with the
+  USB controller's state.
+- `tap_card=auto` finds the codec by `/dev/snd/by-path/platform-sound`. Models whose audio is a USB device
+  have none; there it uses the first card MPC opens and logs which. Set `tap_card=<n>` if that is wrong.
 
 ## License
 

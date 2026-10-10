@@ -37,7 +37,8 @@ iad_class=1
 function_name=MPC USB Audio
 
 # --- MPC side --------------------------------------------------------------------------------
-# ALSA card of the codec: auto follows /dev/snd/by-path/platform-sound.
+# ALSA card of the codec: auto follows /dev/snd/by-path/platform-sound. Where there is none (a model
+# whose audio is a USB device), auto uses the first card MPC opens; the log names it.
 tap_card=auto
 
 # Frames queued in each direction (latency vs. safety); -1 latches the first measured fill.

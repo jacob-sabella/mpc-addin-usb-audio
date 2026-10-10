@@ -26,7 +26,8 @@ typedef struct {
   mpcua_cfg cfg;
   mpcua_alsa alsa;
   int alsa_ok;
-  int tap_card;             /* codec card index, or -1 if unknown */
+  _Atomic int tap_card;     /* codec card index, or -1 while unknown (tap_card=auto adopts MPC's first card) */
+  _Atomic int gadget_seen;  /* our function was added to MPC's standalone gadget */
 
   mpcua_stream play, cap;
   mpcua_ring out_ring;      /* MPC main out  -> forwarder (audio thread produces) */
@@ -44,5 +45,7 @@ extern mpcua_state g_ua;
 
 /* Start the forwarder thread once (SCHED_OTHER, signals blocked, detached). */
 void mpcua_fwd_start(void);
+/* Start a detached SCHED_OTHER thread with every signal blocked; 0 or an errno. */
+int mpcua_spawn(void *(*fn)(void *));
 
 #endif
