@@ -49,6 +49,17 @@ run "$B/bin/not-mpc" "$tmp/cfs" inert
 run /bin/true
 echo "--- addin log"
 cat "$tmp/usbaudio.log"
+grep -q "no USB audio" "$tmp/usbaudio.log" && { echo "FAIL: gadget-missing warning although the gadget came"; exit 1; }
+# tap_card=auto without a platform codec (audio on a USB card), and MPC never enabling its gadget.
+printf 'configfs=%s\ntap_card=auto\nlog=%s\n' "$tmp/cfs" "$tmp/auto.log" > "$tmp/auto.conf"
+MPC_USB_AUDIO_CONF="$tmp/auto.conf" MPC_USB_AUDIO_GADGET_WAIT=1 FAKE_CONFIGFS="$tmp/cfs" \
+  LD_PRELOAD="$ASANLIB:$PWD/$B/libmpc_usb_audio.so" "$B/bin/MPC" "$tmp/cfs" auto ||
+  { cat "$tmp/auto.log" 2>/dev/null; exit 1; }
+if [ ! -e /dev/snd/by-path/platform-sound ]; then
+  grep -q "codec card 3: the first card MPC opened" "$tmp/auto.log" && grep -q "no USB audio: after 1 s" "$tmp/auto.log" ||
+    { echo "FAIL: auto card / gadget warning"; cat "$tmp/auto.log"; exit 1; }
+  echo "ok   auto card and missing-gadget warning logged"
+fi
 # Installed layout: no MPC_USB_AUDIO_CONF; usbaudio.conf is read from the .so's folder and log=auto writes there.
 mkdir -p "$tmp/addin" "$tmp/cfs2"
 cp "$B/libmpc_usb_audio.so" "$tmp/addin/"

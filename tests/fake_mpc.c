@@ -1,6 +1,8 @@
 /* fake_mpc.c: stands in for /usr/bin/MPC (the binary must be named MPC for the addin to activate).
  * Drives the preloaded addin through the same calls MPC makes and checks what it does.
- * Usage: MPC <configfs-root> [expect-inactive] */
+ * Usage: MPC <configfs-root> [inert | auto]
+ *   inert: running under another name, every hook must pass through
+ *   auto:  tap_card=auto with no platform codec and no gadget ever enabled */
 #ifndef _GNU_SOURCE
 #define _GNU_SOURCE
 #endif
@@ -9,6 +11,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 #include "t.h"
 
 typedef struct { int card, stream; } fake_pcm;
@@ -44,6 +47,27 @@ int main(int argc, char **argv) {
   CHECK(t_active && t_set && t_pop && t_push);
   if (t_fail) T_DONE("hooks: test helpers present");
 
+  if (argc > 2 && !strcmp(argv[2], "auto")) {
+    CHECK_EQ(t_active(), 1);
+    /* the first card MPC opens becomes the codec; another card is not tapped */
+    fake_pcm *pp, *other_pcm, *cp;
+    fake_hw hw = {10, 2, 44100, 3};
+    snd_pcm_open(&pp, "hw:3,0", 0, 0);
+    snd_pcm_open(&other_pcm, "hw:4,0", 0, 0);
+    snd_pcm_open(&cp, "hw:3,0", 1, 0);
+    snd_pcm_hw_params(pp, &hw);
+    snd_pcm_hw_params(other_pcm, &hw);
+    t_set(1, 0);
+    int32_t ramp[256], got[256];
+    for (int i = 0; i < 256; i++) ramp[i] = i * 3 + 1;
+    CHECK_EQ(snd_pcm_writei(pp, ramp, 128), 128);
+    CHECK_EQ(snd_pcm_writei(other_pcm, ramp, 128), 128);
+    CHECK_EQ(t_pop(0, got, 256, 2), 128);
+    for (int i = 0; i < 256; i++) CHECK_EQ(got[i], ramp[i]);
+    snd_pcm_close(pp); snd_pcm_close(other_pcm); snd_pcm_close(cp);
+    sleep(2);   /* MPC_USB_AUDIO_GADGET_WAIT=1: the watch thread logs that no gadget came */
+    T_DONE("hooks: tap_card=auto adopts MPC's first card");
+  }
   if (argc > 2) {  /* running under another name: must be a pure pass-through */
     CHECK_EQ(t_active(), 0);
     fake_gadget g = {"standalone", 0};

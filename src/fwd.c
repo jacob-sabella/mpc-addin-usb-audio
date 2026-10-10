@@ -423,14 +423,14 @@ static void *fwd_main(void *arg) {
   return NULL;
 }
 
-void mpcua_fwd_start(void) {
-  static atomic_flag started = ATOMIC_FLAG_INIT;
-  if (atomic_flag_test_and_set(&started)) return;
+/* A detached SCHED_OTHER thread with every signal blocked: never inherits MPC's RT policy, never takes
+ * one of MPC's signals. 0 or an errno. */
+int mpcua_spawn(void *(*fn)(void *)) {
   pthread_attr_t at;
   pthread_attr_init(&at);
   pthread_attr_setdetachstate(&at, PTHREAD_CREATE_DETACHED);
   pthread_attr_setstacksize(&at, 256 * 1024);
-  pthread_attr_setinheritsched(&at, PTHREAD_EXPLICIT_SCHED);   /* never inherit MPC's RT policy */
+  pthread_attr_setinheritsched(&at, PTHREAD_EXPLICIT_SCHED);
   pthread_attr_setschedpolicy(&at, SCHED_OTHER);
   struct sched_param sp = {0};
   pthread_attr_setschedparam(&at, &sp);
@@ -438,9 +438,16 @@ void mpcua_fwd_start(void) {
   sigfillset(&all);
   pthread_sigmask(SIG_SETMASK, &all, &old);   /* the new thread inherits "all blocked" */
   pthread_t th;
-  int r = pthread_create(&th, &at, fwd_main, NULL);
+  int r = pthread_create(&th, &at, fn, NULL);
   pthread_sigmask(SIG_SETMASK, &old, NULL);
   pthread_attr_destroy(&at);
+  return r;
+}
+
+void mpcua_fwd_start(void) {
+  static atomic_flag started = ATOMIC_FLAG_INIT;
+  if (atomic_flag_test_and_set(&started)) return;
+  int r = mpcua_spawn(fwd_main);
   if (r) {
     mpcua_log("pthread_create: %s", strerror(r));
     atomic_flag_clear(&started);

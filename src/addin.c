@@ -17,13 +17,16 @@
 #endif
 #include "addin.h"
 
+#include <dirent.h>
 #include <dlfcn.h>
 #include <errno.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/prctl.h>
 #include <sys/stat.h>
+#include <time.h>
 #include <unistd.h>
 
 #include "gadget.h"
@@ -68,6 +71,17 @@ static int exe_is_mpc(void) {
   return strcmp(b ? b + 1 : p, "MPC") == 0;
 }
 
+/* A USB gadget's own ALSA card (its id is "UAC2Gadget", for example): never MPC's audio. */
+static int is_gadget_card(int card) {
+  char p[64], id[64] = "";
+  snprintf(p, sizeof p, "/proc/asound/card%d/id", card);
+  FILE *f = fopen(p, "re");
+  if (!f) return 0;
+  if (!fgets(id, sizeof id, f)) id[0] = 0;
+  fclose(f);
+  return strstr(id, "Gadget") != NULL;
+}
+
 /* The folder this .so was loaded from (the installer puts its settings and log there), "" if unknown. */
 static void addin_dir(char *out, size_t n) {
   out[0] = 0;
@@ -88,7 +102,9 @@ static void addin_dir(char *out, size_t n) {
   fclose(f);
 }
 
-/* The codec card: same rule as MPC's own controller-mode forwarder (/dev/snd/by-path/platform-sound). */
+/* The codec card: same rule as MPC's own controller-mode forwarder (/dev/snd/by-path/platform-sound).
+ * -1 when there is none (models whose audio is a USB device): snd_pcm_open then adopts the first card
+ * MPC opens. */
 static int resolve_tap_card(const mpcua_cfg *c) {
   if (c->tap_card >= 0) return c->tap_card;
   char t[64];
@@ -97,6 +113,38 @@ static int resolve_tap_card(const mpcua_cfg *c) {
   t[n] = 0;
   const char *s = strstr(t, "controlC");
   return s ? atoi(s + 8) : -1;
+}
+
+/* MPC builds its standalone gadget within a second or two of starting. If it never does, say so once:
+ * the addin has nothing to add USB audio to (reported on an MPC Live II in standalone mode).
+ * MPC_USB_AUDIO_GADGET_WAIT overrides the wait, in seconds (tests). */
+static void *gadget_watch(void *arg) {
+  (void)arg;
+  prctl(PR_SET_NAME, "usbaudio-wait", 0, 0, 0);
+  const char *w = getenv("MPC_USB_AUDIO_GADGET_WAIT");
+  int secs = w && atoi(w) > 0 ? atoi(w) : 60;
+  for (int i = 0; i < secs; i++) {
+    if (atomic_load(&g_ua.gadget_seen)) return NULL;
+    struct timespec ts = {1, 0};
+    while (nanosleep(&ts, &ts) < 0 && errno == EINTR) {}
+  }
+  if (atomic_load(&g_ua.gadget_seen)) return NULL;
+  char udc[64] = "none", state[64] = "?";
+  DIR *d = opendir("/sys/class/udc");
+  struct dirent *de;
+  while (d && (de = readdir(d)))
+    if (de->d_name[0] != '.') { snprintf(udc, sizeof udc, "%.63s", de->d_name); break; }
+  if (d) closedir(d);
+  if (strcmp(udc, "none")) {
+    char p[160];
+    snprintf(p, sizeof p, "/sys/class/udc/%s/state", udc);
+    FILE *f = fopen(p, "re");
+    if (f) { if (fgets(state, sizeof state, f)) state[strcspn(state, "\n")] = 0; fclose(f); }
+  }
+  mpcua_log("no USB audio: after %d s MPC has not enabled its gadget '%s' (UDC %s: %s). On some "
+            "models MPC builds no USB gadget in standalone mode, so there is nothing to add USB audio to",
+            secs, g_ua.cfg.gadget, udc, state);
+  return NULL;
 }
 
 __attribute__((constructor)) static void mpcua_ctor(void) {
@@ -127,11 +175,18 @@ __attribute__((constructor)) static void mpcua_ctor(void) {
   mpcua_ring_init(&g_ua.host_ring, host_store, RING_SAMPLES);
   for (int i = 0; i < g_ua.cfg.n_to_host; i++)
     if (g_ua.cfg.to_host_map[i].kind == MPCUA_SRC_IN) g_ua.need_in = 1;
-  g_ua.tap_card = resolve_tap_card(&g_ua.cfg);
+  atomic_store(&g_ua.tap_card, resolve_tap_card(&g_ua.cfg));
   g_ua.active = 1;
-  mpcua_log("active: gadget '%s', %d ch to computer, %u from it, %u Hz, codec card %d",
-            g_ua.cfg.gadget, g_ua.cfg.n_to_host, g_ua.cfg.host_channels, g_ua.cfg.rate,
-            g_ua.tap_card);
+  int tap = atomic_load(&g_ua.tap_card);
+  if (tap >= 0)
+    mpcua_log("active: gadget '%s', %d ch to computer, %u from it, %u Hz, codec card %d",
+              g_ua.cfg.gadget, g_ua.cfg.n_to_host, g_ua.cfg.host_channels, g_ua.cfg.rate, tap);
+  else
+    mpcua_log("active: gadget '%s', %d ch to computer, %u from it, %u Hz, no platform codec: "
+              "the first card MPC opens", g_ua.cfg.gadget, g_ua.cfg.n_to_host, g_ua.cfg.host_channels,
+              g_ua.cfg.rate);
+  int e = mpcua_spawn(gadget_watch);
+  if (e) mpcua_log("gadget watch thread: %s", strerror(e));
 }
 
 /* ---- gadget hook (MPC setup thread) --------------------------------------------------------- */
@@ -195,6 +250,7 @@ static void add_uac2(usbg_gadget *g) {
     }
     mpcua_log("uac2.%s added to gadget '%s'", g_ua.cfg.instance, name);
   }
+  atomic_store(&g_ua.gadget_seen, 1);
   if (g_ua.alsa_ok) mpcua_fwd_start();
 }
 
@@ -217,14 +273,20 @@ EXPORT int snd_pcm_open(snd_pcm_t **pcmp, const char *name, int stream, int mode
   if (!real_open) resolve_reals();
   if (!real_open) return -ENOSYS;
   int r = real_open(pcmp, name, stream, mode);
-  if (r < 0 || !g_ua.active || g_ua.tap_card < 0 || !g_ua.alsa.info_sizeof || !g_ua.alsa.info ||
-      !g_ua.alsa.info_get_card)
+  if (r < 0 || !g_ua.active || !g_ua.alsa.info_sizeof || !g_ua.alsa.info || !g_ua.alsa.info_get_card)
     return r;
   snd_pcm_info_t *info = alloca(g_ua.alsa.info_sizeof());
   memset(info, 0, g_ua.alsa.info_sizeof());
   if (g_ua.alsa.info(*pcmp, info) < 0) return r;
   int card = g_ua.alsa.info_get_card(info);
-  if (card != g_ua.tap_card) return r;
+  int tap = atomic_load(&g_ua.tap_card);
+  if (tap < 0) {   /* tap_card=auto and no platform codec: MPC's first card is its audio */
+    if (card < 0 || is_gadget_card(card)) return r;
+    if (atomic_compare_exchange_strong(&g_ua.tap_card, &tap, card))
+      mpcua_log("codec card %d: the first card MPC opened ('%s')", card, name ? name : "?");
+    tap = atomic_load(&g_ua.tap_card);
+  }
+  if (card != tap) return r;
   mpcua_stream *s = stream == MPCUA_PCM_PLAYBACK ? &g_ua.play : &g_ua.cap;
   atomic_store(&s->ok, 0);
   atomic_store(&s->pcm, *pcmp);
