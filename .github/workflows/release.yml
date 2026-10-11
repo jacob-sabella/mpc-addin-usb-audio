@@ -17,12 +17,12 @@ on:
 
 jobs:
   addin:
-    uses: sd88me/mpc-vst-plugins/.github/workflows/addin-release.yml@9f5f91a14dfe7a57b5ac25f86a461c6539f82ba1
+    uses: sd88me/mpc-vst-plugins/.github/workflows/addin-release.yml@14f12c59f52b18056e2c3d6e940daba54dc75e79
     permissions: { contents: write }
     with:
       tag: usb-audio-addin-v${{ inputs.version }}
       version: ${{ inputs.version }}
-      tools_ref: 9f5f91a14dfe7a57b5ac25f86a461c6539f82ba1
+      tools_ref: 14f12c59f52b18056e2c3d6e940daba54dc75e79
       package_dir: build/package
       build: tools/build_armhf.sh
       host_test: sudo sysctl -q vm.mmap_rnd_bits=28 && TSAN=1 tools/test_host.sh
