@@ -2,7 +2,9 @@
  *
  * Inside MPC's process only (checked via /proc/self/exe), this:
  *   1. hooks usbg_enable_gadget: when MPC is about to bind its standalone gadget, a UAC2 function is
- *      created and linked with MPC's own libusbgx handles, so MPC's recursive teardown removes it;
+ *      created and linked with MPC's own libusbgx handles, so MPC's recursive teardown removes it.
+ *      Where MPC builds no gadget in standalone mode, the addin builds one of its own instead
+ *      (standalone_create, own_gadget_main);
  *   2. hooks snd_pcm_open/hw_params/close to find MPC's playback and capture PCMs on the codec card;
  *   3. hooks snd_pcm_writei/readi (and the non-interleaved variants) to copy main out and inputs into
  *      lock-free rings, and to mix computer playback into what MPC reads from its inputs.
@@ -20,6 +22,7 @@
 #include <dirent.h>
 #include <dlfcn.h>
 #include <errno.h>
+#include <pthread.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -147,6 +150,75 @@ static void *gadget_watch(void *arg) {
   return NULL;
 }
 
+/* ---- our own gadget (standalone_create) ------------------------------------------------------- */
+
+static pthread_mutex_t own_lock = PTHREAD_MUTEX_INITIALIZER;
+static _Atomic int own_up;   /* our own gadget exists and holds the UDC */
+static int mpc_enabled;      /* MPC has enabled a gadget of its own (under own_lock): never build ours */
+
+static const char *udc_dir(void) {
+  const char *d = getenv("MPC_USB_AUDIO_UDC_DIR");   /* tests */
+  return d && *d ? d : "/sys/class/udc";
+}
+
+/* Give the UDC back: MPC (or something else) is about to use it. */
+static void own_remove(const char *why) {
+  pthread_mutex_lock(&own_lock);
+  if (atomic_load(&own_up)) {
+    int r = mpcua_own_gadget_remove(&g_ua.cfg);
+    atomic_store(&own_up, 0);
+    atomic_store(&g_ua.live_gadget, (const char *)g_ua.cfg.gadget);
+    if (r < 0) mpcua_log("%s; removing our gadget '%s' failed: %s", why, g_ua.cfg.own_gadget, strerror(-r));
+    else mpcua_log("%s: removed our gadget '%s'", why, g_ua.cfg.own_gadget);
+  }
+  pthread_mutex_unlock(&own_lock);
+}
+
+/* Firmware where MPC builds no gadget in standalone mode (an MPC One on HAKAI 3.9.1, issue #4): when
+ * none has appeared after own_wait seconds, build our own and start the forwarder on it. MPC builds
+ * its own within a second or two where it builds one at all. For a minute after, give way at once to
+ * any other gadget; MPC's own (through usbg_enable_gadget) is handled before it binds. MPC restarts on
+ * a switch to controller mode, and the next process removes ours in its constructor. */
+static void *own_gadget_main(void *arg) {
+  (void)arg;
+  prctl(PR_SET_NAME, "usbaudio-own", 0, 0, 0);
+  for (int i = 0; i < g_ua.cfg.own_wait; i++) {
+    if (atomic_load(&g_ua.gadget_seen)) return NULL;
+    struct timespec ts = {1, 0};
+    while (nanosleep(&ts, &ts) < 0 && errno == EINTR) {}
+  }
+  if (atomic_load(&g_ua.gadget_seen)) return NULL;
+  if (mpcua_other_gadget_present(&g_ua.cfg)) {
+    mpcua_log("MPC built no gadget '%s', but another one exists: not building ours", g_ua.cfg.gadget);
+    return NULL;
+  }
+  char err[200] = "";
+  pthread_mutex_lock(&own_lock);
+  int r = mpc_enabled || atomic_load(&g_ua.gadget_seen) ? 1 : mpcua_own_gadget_create(&g_ua.cfg, udc_dir(), err, sizeof err);
+  if (r == 0) {
+    atomic_store(&own_up, 1);
+    atomic_store(&g_ua.live_gadget, (const char *)g_ua.cfg.own_gadget);
+  }
+  pthread_mutex_unlock(&own_lock);
+  if (r > 0) return NULL;
+  if (r < 0) { mpcua_log("own gadget '%s' not built: %s", g_ua.cfg.own_gadget, err); return NULL; }
+  mpcua_log("MPC built no gadget '%s' in %d s: built our own, '%s'", g_ua.cfg.gadget, g_ua.cfg.own_wait,
+            g_ua.cfg.own_gadget);
+  atomic_store(&g_ua.gadget_seen, 1);
+  if (g_ua.alsa_ok) mpcua_fwd_start();
+  for (int i = 0; i < 600 && atomic_load(&own_up); i++) {   /* a minute, every 100 ms */
+    struct timespec ts = {0, 100 * 1000 * 1000};
+    while (nanosleep(&ts, &ts) < 0 && errno == EINTR) {}
+    if (mpcua_other_gadget_present(&g_ua.cfg)) { own_remove("another gadget appeared"); break; }
+  }
+  return NULL;
+}
+
+/* MPC exits: take our gadget away with it, so the computer doesn't keep a silent audio device. */
+__attribute__((destructor)) static void mpcua_dtor(void) {
+  if (atomic_load(&own_up)) own_remove("MPC exiting");
+}
+
 __attribute__((constructor)) static void mpcua_ctor(void) {
   resolve_reals();
   if (!exe_is_mpc()) return;
@@ -164,6 +236,12 @@ __attribute__((constructor)) static void mpcua_ctor(void) {
   if (bad < 0) mpcua_log("config %s unreadable, using defaults", path);
   else if (bad) mpcua_log("config %s: %d problem(s), first: %s", path, bad, err);
   else mpcua_log("config %s", path);
+  /* Our gadget outlives a process that was killed, and would hold the UDC against the gadget MPC is
+   * about to build (after a switch to controller mode, say): remove it first, enabled or not. */
+  int left = mpcua_own_gadget_remove(&g_ua.cfg);
+  if (left > 0) mpcua_log("removed our gadget '%s' left from the last run", g_ua.cfg.own_gadget);
+  else if (left < 0) mpcua_log("our gadget '%s' from the last run is still there: %s", g_ua.cfg.own_gadget, strerror(-left));
+  atomic_store(&g_ua.live_gadget, (const char *)g_ua.cfg.gadget);
   if (!g_ua.cfg.enabled) { mpcua_log("disabled in config"); return; }
 
   int missing = mpcua_alsa_resolve(&g_ua.alsa);
@@ -187,6 +265,8 @@ __attribute__((constructor)) static void mpcua_ctor(void) {
               g_ua.cfg.rate);
   int e = mpcua_spawn(gadget_watch);
   if (e) mpcua_log("gadget watch thread: %s", strerror(e));
+  if (g_ua.cfg.standalone_create && (e = mpcua_spawn(own_gadget_main)))
+    mpcua_log("own gadget thread: %s", strerror(e));
 }
 
 /* ---- gadget hook (MPC setup thread) --------------------------------------------------------- */
@@ -250,12 +330,19 @@ static void add_uac2(usbg_gadget *g) {
     }
     mpcua_log("uac2.%s added to gadget '%s'", g_ua.cfg.instance, name);
   }
+  atomic_store(&g_ua.live_gadget, (const char *)g_ua.cfg.gadget);
   atomic_store(&g_ua.gadget_seen, 1);
   if (g_ua.alsa_ok) mpcua_fwd_start();
 }
 
 EXPORT int usbg_enable_gadget(usbg_gadget *g, usbg_udc *udc) {
   if (!real_enable_gadget) *(void **)&real_enable_gadget = dlsym(RTLD_NEXT, "usbg_enable_gadget");
+  if (g_ua.active && g) {
+    pthread_mutex_lock(&own_lock);
+    mpc_enabled = 1;
+    pthread_mutex_unlock(&own_lock);
+    own_remove("MPC is enabling a gadget");
+  }
   if (g_ua.active && g) add_uac2(g);
   return real_enable_gadget ? real_enable_gadget(g, udc) : -1;
 }

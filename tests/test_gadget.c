@@ -19,6 +19,64 @@ static void slurp(const char *dir, const char *name, char *out, size_t n) {
   if (f) { size_t r = fread(out, 1, n - 1, f); out[r] = 0; fclose(f); }
 }
 
+static void sh(const char *fmt, const char *a) {
+  char cmd[600]; snprintf(cmd, sizeof cmd, fmt, a, a, a, a, a, a);
+  CHECK(system(cmd) == 0);
+}
+
+/* The standalone fallback against a fake configfs: the test lays out the directories and attribute
+ * files the kernel would make on each mkdir, and a fake /sys/class/udc. */
+static void own_gadget(void) {
+  char root[] = "/tmp/mpcua_own_XXXXXX";
+  CHECK(mkdtemp(root) != NULL);
+  mpcua_cfg c; mpcua_cfg_defaults(&c);
+  char err[200] = "", cfs[96], udc[96], g[160], v[64], p[256];
+  snprintf(cfs, sizeof cfs, "%s/cfs", root);
+  snprintf(udc, sizeof udc, "%s/udc", root);
+  snprintf(c.configfs, sizeof c.configfs, "%s", cfs);
+  snprintf(g, sizeof g, "%s/mpcusbaudio", cfs);
+
+  CHECK_EQ(mpcua_own_gadget_create(&c, udc, err, sizeof err), -1);   /* no UDC at all */
+  CHECK(strstr(err, "no USB device controller") != NULL);
+
+  sh("mkdir -p '%s/udc/fe800000.usb' '%s/cfs/mpcusbaudio/strings/0x409' "
+     "'%s/cfs/mpcusbaudio/functions/uac2.usbaudio' '%s/cfs/mpcusbaudio/configs/c.1/strings/0x409'", root);
+  sh("cd '%s/cfs/mpcusbaudio' && touch idVendor idProduct bcdDevice bDeviceClass bDeviceSubClass "
+     "bDeviceProtocol UDC strings/0x409/manufacturer strings/0x409/product configs/c.1/strings/0x409/configuration && "
+     "cd functions/uac2.usbaudio && touch p_chmask p_srate p_ssize c_chmask c_srate c_ssize", root);
+  CHECK_EQ(mpcua_other_gadget_present(&c), 0);              /* only ours */
+  CHECK_EQ(mpcua_own_gadget_create(&c, udc, err, sizeof err), 0);
+  slurp(g, "UDC", v, sizeof v); CHECK(!strcmp(v, "fe800000.usb"));
+  slurp(g, "idVendor", v, sizeof v); CHECK(!strcmp(v, "0x1d6b"));
+  slurp(g, "bDeviceClass", v, sizeof v); CHECK(!strcmp(v, "0xEF"));
+  slurp(g, "strings/0x409/product", v, sizeof v); CHECK(!strcmp(v, "MPC USB Audio"));
+  slurp(g, "strings/0x409/manufacturer", v, sizeof v); CHECK(!strcmp(v, "mpc-addin-usb-audio"));
+  slurp(g, "functions/uac2.usbaudio/p_chmask", v, sizeof v); CHECK(!strcmp(v, "0xf"));
+  char link[256] = ""; snprintf(p, sizeof p, "%s/configs/c.1/uac2.usbaudio", g);
+  CHECK(readlink(p, link, sizeof link - 1) > 0); CHECK(strstr(link, "functions/uac2.usbaudio") != NULL);
+
+  /* removal: unbind first. Real configfs attribute files don't stop rmdir; here they do, until gone */
+  CHECK(mpcua_own_gadget_remove(&c) < 0);
+  slurp(g, "UDC", v, sizeof v); CHECK(!strcmp(v, "\n"));
+  CHECK(access(p, F_OK) != 0);                              /* the function is unlinked from the config */
+  sh("find '%s/cfs/mpcusbaudio' -type f -delete", root);
+  CHECK(mpcua_own_gadget_remove(&c) < 0);                   /* configfs's own groups stand in the way here */
+  sh("cd '%s/cfs/mpcusbaudio' && rmdir configs/c.1/strings configs/c.1 configs functions strings", root);
+  CHECK_EQ(mpcua_own_gadget_remove(&c), 1);
+  CHECK(access(g, F_OK) != 0);
+  CHECK_EQ(mpcua_own_gadget_remove(&c), 0);                 /* nothing there */
+
+  /* a required attribute the kernel lacks: fails, says which, and cleans up what it made */
+  sh("mkdir -p '%s/cfs/mpcusbaudio/strings/0x409' && cd '%s/cfs/mpcusbaudio' && touch idVendor", root);
+  CHECK_EQ(mpcua_own_gadget_create(&c, udc, err, sizeof err), -1);
+  CHECK(strstr(err, "idProduct") != NULL);
+
+  /* any other gadget directory counts as MPC's */
+  sh("mkdir -p '%s/cfs/standalone'", root);
+  CHECK_EQ(mpcua_other_gadget_present(&c), 1);
+  sh("rm -rf '%s'", root);
+}
+
 int main(void) {
   mpcua_cfg c; mpcua_cfg_defaults(&c);
   mpcua_attr a[24];
@@ -59,5 +117,7 @@ int main(void) {
 
   char cmd[300]; snprintf(cmd, sizeof cmd, "rm -rf '%s'", dir);
   CHECK(system(cmd) == 0);
+
+  own_gadget();
   T_DONE("gadget");
 }

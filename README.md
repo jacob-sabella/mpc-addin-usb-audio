@@ -21,6 +21,8 @@ The design is backed by `docs/FEASIBILITY.md`.
 1. MPC builds its standalone USB gadget (USB MIDI) with libusbgx at every start. The addin hooks
    `usbg_enable_gadget` and, just before the gadget is bound, adds a `uac2` function to it with
    MPC's own libusbgx handles. MPC's normal teardown therefore removes it too.
+   Where MPC builds no gadget in standalone mode, the addin builds one of its own after `own_wait`
+   seconds, with only the audio function (`standalone_create`, below).
 2. It hooks `snd_pcm_open`/`hw_params`/`close` to recognise MPC's playback and capture streams on
    the built-in codec.
 3. In MPC's audio thread, the `snd_pcm_writei`/`readi` hooks (and the non-interleaved variants)
@@ -46,7 +48,7 @@ Latency is about 8-12 ms each way at the default `target_frames=256` and 44.1 kH
 | `src/fmt.c`, `src/chmap.c` | sample formats, saturating mix, channel maps |
 | `src/drift.c` | PI drift controller |
 | `src/config.c` | `usbaudio.conf` parser |
-| `src/gadget.c` | UAC2 configfs attributes, IAD device class |
+| `src/gadget.c` | UAC2 configfs attributes, IAD device class, the addin's own gadget where MPC builds none |
 | `src/alsa_api.c` | hand-written libasound ABI table, resolved with `dlsym(RTLD_NEXT)` |
 | `tests/` | unit tests, plus an integration test (fake libasound and libusbgx, fake `MPC` binary) |
 | `tools/test_host.sh` | runs all offline tests under ASan and UBSan (`TSAN=1` adds a TSan ring stress) |
@@ -106,10 +108,18 @@ The log is `usbaudio.log` in the addin's folder (`log=` moves or disables it), w
 - The computer sees MPC's main out as it goes to the codec. Per-track outputs exist only as far as
   MPC routes them to codec outputs (`out3`... on devices with more than two outputs).
 - Not active in MPC's controller (computer) mode. MPC provides its own USB audio there.
-- It needs MPC to build its standalone USB gadget (the USB MIDI port). Verified on the MPC Key 37. On an MPC
-  Live II (reported 2026-10-09, custom firmware) MPC builds no gadget in standalone mode, so there is nothing
-  to add USB audio to: the log says "no USB audio: after 60 s MPC has not enabled its gadget" with the
-  USB controller's state.
+- Where MPC builds its standalone USB gadget (the USB MIDI port; the MPC Key 37), the audio function is added
+  to it. Some setups build none in standalone mode: an MPC One on HAKAI 3.9.1 (issue #4) and an MPC Live II on
+  custom firmware (reported 2026-10-09). There the addin waits `own_wait` seconds (30) and then builds a gadget
+  of its own, `own_gadget`, with only the audio function, so the computer sees a USB audio device but no MPC
+  MIDI port. The log says "MPC built no gadget ... built our own". It removes that gadget as soon as MPC enables
+  one, when MPC exits, and at the next MPC start (MPC restarts on a switch to controller mode).
+  `standalone_create=0` turns this off; then the log says "no USB audio: after 60 s MPC has not enabled its
+  gadget" with the USB controller's state. The reporter of #4 ran the same approach on an MPC One; this build
+  of it has run offline only so far.
+- On HAKAI, MPC is started by `/usr/bin/az01-launch-MPC`, which sets `LD_PRELOAD` itself, so the installer's
+  systemd setting doesn't reach MPC and the addin isn't loaded. The installer warns when that happens. Until
+  the shared installer handles that launcher, add the library to its `LD_PRELOAD` lines by hand (issue #4).
 - `tap_card=auto` finds the codec by `/dev/snd/by-path/platform-sound`. Models whose audio is a USB device
   have none; there it uses the first card MPC opens and logs which. Set `tap_card=<n>` if that is wrong.
 

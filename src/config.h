@@ -32,6 +32,9 @@ typedef struct {
   double max_ppm;           /* max_ppm=1000 */
   double drift_bw;          /* drift_bw=0.01 (Hz) */
   int test_tone;            /* test_tone=0        (1: send a 1 kHz tone instead of the tap) */
+  int standalone_create;    /* standalone_create=1 (no gadget from MPC: create our own, own_gadget) */
+  char own_gadget[64];      /* own_gadget=mpcusbaudio */
+  int own_wait;             /* own_wait=30        (seconds to wait for MPC's gadget first) */
   char log_path[160];       /* log=auto: usbaudio.log next to the .so; a path; "" disables */
 
   mpcua_chsrc to_host_map[MPCUA_MAX_CH]; int n_to_host;

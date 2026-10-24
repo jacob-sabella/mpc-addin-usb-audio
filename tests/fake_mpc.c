@@ -1,8 +1,9 @@
 /* fake_mpc.c: stands in for /usr/bin/MPC (the binary must be named MPC for the addin to activate).
  * Drives the preloaded addin through the same calls MPC makes and checks what it does.
- * Usage: MPC <configfs-root> [inert | auto]
+ * Usage: MPC <configfs-root> [inert | auto | own]
  *   inert: running under another name, every hook must pass through
- *   auto:  tap_card=auto with no platform codec and no gadget ever enabled */
+ *   auto:  tap_card=auto with no platform codec and no gadget ever enabled
+ *   own:   no gadget from MPC, so the addin builds its own (own_wait=1); then MPC enables one after all */
 #ifndef _GNU_SOURCE
 #define _GNU_SOURCE
 #endif
@@ -47,6 +48,21 @@ int main(int argc, char **argv) {
   CHECK(t_active && t_set && t_pop && t_push);
   if (t_fail) T_DONE("hooks: test helpers present");
 
+  if (argc > 2 && !strcmp(argv[2], "own")) {
+    CHECK_EQ(t_active(), 1);
+    char path[512], v[64];
+    snprintf(path, sizeof path, "%s/mpcusbaudio/UDC", root);
+    for (int i = 0; i < 40; i++) { slurp(path, v, sizeof v); if (v[0] && v[0] != '\n') break; usleep(100000); }
+    CHECK(!strcmp(v, "fake.udc"));                  /* built and bound to the only UDC */
+    snprintf(path, sizeof path, "%s/mpcusbaudio/idVendor", root);
+    slurp(path, v, sizeof v); CHECK(!strcmp(v, "0x1d6b"));
+    fake_gadget g = {"standalone", 0};
+    CHECK_EQ(usbg_enable_gadget(&g, NULL), 0);      /* MPC builds its own after all: ours goes first */
+    snprintf(path, sizeof path, "%s/mpcusbaudio/UDC", root);
+    slurp(path, v, sizeof v); CHECK(!strcmp(v, "\n"));
+    CHECK_EQ(fake_add_calls, 1); CHECK_EQ(fake_enable_calls, 1);
+    T_DONE("hooks: own gadget when MPC builds none, removed when MPC enables one");
+  }
   if (argc > 2 && !strcmp(argv[2], "auto")) {
     CHECK_EQ(t_active(), 1);
     /* the first card MPC opens becomes the codec; another card is not tapped */

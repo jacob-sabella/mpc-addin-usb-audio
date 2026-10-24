@@ -47,6 +47,14 @@ int main(void) {
   CHECK_EQ(mpcua_cfg_parse(&c, "host_channels=4\nto_mpc_in=host4,host3\n", err, sizeof err), 0);
   CHECK_EQ(c.to_mpc_map[0].idx, 3);
 
+  /* the standalone fallback: on by default, its gadget name kept to configfs-safe characters */
+  mpcua_cfg_defaults(&c);
+  CHECK_EQ(c.standalone_create, 1); CHECK(!strcmp(c.own_gadget, "mpcusbaudio")); CHECK_EQ(c.own_wait, 30);
+  CHECK_EQ(mpcua_cfg_parse(&c, "standalone_create=0\nown_gadget=my-uac\nown_wait=5\n", err, sizeof err), 0);
+  CHECK_EQ(c.standalone_create, 0); CHECK(!strcmp(c.own_gadget, "my-uac")); CHECK_EQ(c.own_wait, 5);
+  CHECK_EQ(mpcua_cfg_parse(&c, "own_gadget=../x\nown_wait=0\n", err, sizeof err), 2);
+  CHECK(!strcmp(c.own_gadget, "my-uac")); CHECK_EQ(c.own_wait, 5);
+
   /* file loading */
   char path[] = "/tmp/mpcua_cfg_XXXXXX";
   int fd = mkstemp(path);

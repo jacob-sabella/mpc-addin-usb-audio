@@ -1,7 +1,8 @@
 /* gadget.h: the UAC2 function's configfs attributes, and small configfs file helpers.
  *
  * The function itself is created through MPC's own libusbgx handle (see addin.c) so MPC's recursive
- * teardown removes it; this file only fills in the attribute files between creation and linking.
+ * teardown removes it; this file fills in the attribute files between creation and linking. Where MPC
+ * builds no gadget, it also builds and removes one of the addin's own (the standalone fallback below).
  */
 #ifndef MPCUA_GADGET_H
 #define MPCUA_GADGET_H
@@ -23,5 +24,16 @@ int mpcua_gadget_set_iad_class(const char *gdir);
 
 /* Write a value to an existing attribute file (no O_CREAT). Returns 0 or -errno. */
 int mpcua_write_attr(const char *path, const char *value);
+
+/* The standalone fallback, for firmware where MPC builds no gadget in standalone mode (an MPC One on
+ * HAKAI 3.9.1, issue #4): a gadget of our own, <configfs>/<own_gadget>, with one uac2.<instance>
+ * function, bound to the first UDC in udc_dir (/sys/class/udc). Real configfs creates the attribute
+ * files itself. Returns 0, or -1 with err filled and whatever was made removed again. */
+int mpcua_own_gadget_create(const mpcua_cfg *cfg, const char *udc_dir, char *err, size_t errlen);
+/* Unbind and remove <configfs>/<own_gadget>. Returns 1 if it was removed, 0 if it wasn't there, or
+ * -errno while it is still there. */
+int mpcua_own_gadget_remove(const mpcua_cfg *cfg);
+/* 1 when configfs holds any gadget other than ours (MPC is building or using one). */
+int mpcua_other_gadget_present(const mpcua_cfg *cfg);
 
 #endif

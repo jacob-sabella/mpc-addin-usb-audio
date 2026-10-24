@@ -10,6 +10,14 @@ gadget=standalone
 instance=usbaudio
 configfs=/sys/kernel/config/usb_gadget
 
+# Where MPC builds no gadget in standalone mode (an MPC One on HAKAI 3.9.1): after own_wait seconds with
+# no gadget at all, the addin builds one of its own, own_gadget, with just the audio function. It goes
+# away again as soon as MPC enables a gadget, when MPC exits, and at the next MPC start. Where MPC builds
+# its gadget (a Key 37), this never comes into play. 0 turns it off.
+standalone_create=1
+own_gadget=mpcusbaudio
+own_wait=30
+
 # Must equal the rate MPC runs its codec at, or nothing is tapped (the log says so).
 rate=44100
 # Bytes per sample on USB: 2, 3 or 4.

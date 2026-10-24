@@ -33,6 +33,9 @@ void mpcua_cfg_defaults(mpcua_cfg *c) {
   c->fwd_periods = 4;
   c->max_ppm = 1000;
   c->drift_bw = 0.01;
+  c->standalone_create = 1;
+  snprintf(c->own_gadget, sizeof c->own_gadget, "mpcusbaudio");
+  c->own_wait = 30;
   snprintf(c->log_path, sizeof c->log_path, "auto");
   mpcua_cfg_finish(c, NULL, 0);
 }
@@ -84,6 +87,8 @@ static int apply(mpcua_cfg *c, const char *k, const char *v) {
   INT("fwd_period", fwd_period, 16, 1024)
   INT("fwd_periods", fwd_periods, 2, 16)
   INT("test_tone", test_tone, 0, 1)
+  INT("standalone_create", standalone_create, 0, 1)
+  INT("own_wait", own_wait, 1, 300)
   DBL("max_ppm", max_ppm, 1, 20000)
   DBL("drift_bw", drift_bw, 0.0005, 0.5)
 #undef INT
@@ -93,6 +98,7 @@ static int apply(mpcua_cfg *c, const char *k, const char *v) {
     c->sample_bytes = (unsigned)l; return 0;
   }
   if (!strcmp(k, "gadget")) return set_name(c->gadget, sizeof c->gadget, v);
+  if (!strcmp(k, "own_gadget")) return set_name(c->own_gadget, sizeof c->own_gadget, v);
   if (!strcmp(k, "instance")) return set_name(c->instance, sizeof c->instance, v);
   if (!strcmp(k, "configfs")) return *v == '/' ? set_str(c->configfs, sizeof c->configfs, v) : -1;
   if (!strcmp(k, "to_host")) return set_str(c->to_host, sizeof c->to_host, v);

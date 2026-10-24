@@ -60,6 +60,21 @@ if [ ! -e /dev/snd/by-path/platform-sound ]; then
     { echo "FAIL: auto card / gadget warning"; cat "$tmp/auto.log"; exit 1; }
   echo "ok   auto card and missing-gadget warning logged"
 fi
+# standalone_create: MPC builds no gadget, so the addin builds its own (the fake configfs is laid out as the
+# kernel would make it on each mkdir), and removes it when MPC enables a gadget after all.
+G="$tmp/cfs3/mpcusbaudio"
+mkdir -p "$tmp/udc/fake.udc" "$G/strings/0x409" "$G/functions/uac2.usbaudio" "$G/configs/c.1/strings/0x409"
+( cd "$G" && touch idVendor idProduct bcdDevice bDeviceClass bDeviceSubClass bDeviceProtocol UDC \
+    strings/0x409/manufacturer strings/0x409/product configs/c.1/strings/0x409/configuration &&
+  cd functions/uac2.usbaudio && touch p_chmask p_srate p_ssize c_chmask c_srate c_ssize )
+printf 'configfs=%s\ntap_card=0\nown_wait=1\nlog=%s\n' "$tmp/cfs3" "$tmp/own.log" > "$tmp/own.conf"
+MPC_USB_AUDIO_CONF="$tmp/own.conf" MPC_USB_AUDIO_UDC_DIR="$tmp/udc" FAKE_CONFIGFS="$tmp/cfs3" \
+  LD_PRELOAD="$ASANLIB:$PWD/$B/libmpc_usb_audio.so" "$B/bin/MPC" "$tmp/cfs3" own ||
+  { cat "$tmp/own.log" 2>/dev/null; exit 1; }
+grep -q "MPC built no gadget 'standalone' in 1 s: built our own, 'mpcusbaudio'" "$tmp/own.log" &&
+  grep -q "MPC is enabling a gadget" "$tmp/own.log" && ! grep -q "no USB audio" "$tmp/own.log" ||
+  { echo "FAIL: own gadget"; cat "$tmp/own.log"; exit 1; }
+echo "ok   own gadget logged"
 # Installed layout: no MPC_USB_AUDIO_CONF; usbaudio.conf is read from the .so's folder and log=auto writes there.
 mkdir -p "$tmp/addin" "$tmp/cfs2"
 cp "$B/libmpc_usb_audio.so" "$tmp/addin/"

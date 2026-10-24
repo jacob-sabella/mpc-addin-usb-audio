@@ -57,14 +57,17 @@ static int read_small(const char *path, char *buf, size_t n) {
   return (int)r;
 }
 
-/* Our function exists in the standalone gadget, and that gadget is bound to a UDC. */
+/* Our function exists in the live gadget (MPC's standalone one, or our own), and that gadget is bound
+ * to a UDC. */
 static int gadget_ready(void) {
   const mpcua_cfg *c = &g_ua.cfg;
+  const char *gadget = atomic_load(&g_ua.live_gadget);
+  if (!gadget) gadget = c->gadget;
   char p[320], udc[64];
   struct stat st;
-  snprintf(p, sizeof p, "%s/%s/functions/uac2.%s", c->configfs, c->gadget, c->instance);
+  snprintf(p, sizeof p, "%s/%s/functions/uac2.%s", c->configfs, gadget, c->instance);
   if (stat(p, &st) != 0) return 0;
-  snprintf(p, sizeof p, "%s/%s/UDC", c->configfs, c->gadget);
+  snprintf(p, sizeof p, "%s/%s/UDC", c->configfs, gadget);
   if (read_small(p, udc, sizeof udc) <= 0) return 0;
   return udc[0] != '\n' && udc[0] != 0;
 }

@@ -27,7 +27,8 @@ typedef struct {
   mpcua_alsa alsa;
   int alsa_ok;
   _Atomic int tap_card;     /* codec card index, or -1 while unknown (tap_card=auto adopts MPC's first card) */
-  _Atomic int gadget_seen;  /* our function was added to MPC's standalone gadget */
+  _Atomic int gadget_seen;  /* our function was added to MPC's standalone gadget, or our own gadget made */
+  _Atomic(const char *) live_gadget;   /* the gadget holding our function: cfg.gadget or cfg.own_gadget */
 
   mpcua_stream play, cap;
   mpcua_ring out_ring;      /* MPC main out  -> forwarder (audio thread produces) */
