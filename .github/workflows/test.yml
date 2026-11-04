@@ -23,8 +23,8 @@ jobs:
         with: { path: mpc-addin-usb-audio }
       - uses: actions/checkout@v4
         with:
-          repository: sd88me/mpc-vst-plugins
-          ref: 68da25ab50925ec9d3c7fc8e623087ee72338faa
+          repository: open-mpc/mpc-vst-plugins
+          ref: 8e266cec8abd3d780e331404209c3e8b8f699c5c
           path: mpc-vst-plugins
       # TSan can't map its shadow memory with the runner's default 32 bits of mmap randomness
       - run: sudo sysctl -q vm.mmap_rnd_bits=28
