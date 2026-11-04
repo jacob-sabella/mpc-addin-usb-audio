@@ -61,14 +61,22 @@ const char *usbg_get_gadget_name(fake_gadget *g) { return g->name; }
 void *usbg_get_first_config(fake_gadget *g) { return &g->cfg; }
 void *usbg_get_function(fake_gadget *g, int type, const char *inst) { (void)g; (void)type; (void)inst; return NULL; }
 int usbg_lookup_function_type(const char *n) { return strcmp(n, "uac2") == 0 ? 14 : -1; }
+/* mkdir -p in-process: a `system("mkdir -p")` child inherits the test's LD_PRELOAD (libasan) and leak-abort ASAN_OPTIONS,
+ * and Ubuntu 26.04's Rust coreutils mkdir leaks at exit, so LeakSanitizer aborted it and the fake failed. */
+static int mkdir_p(const char *path) {
+  char p[256];
+  snprintf(p, sizeof p, "%s", path);
+  for (char *s = p + 1; *s; s++)
+    if (*s == '/') { *s = 0; if (mkdir(p, 0755) != 0 && errno != EEXIST) return -1; *s = '/'; }
+  return mkdir(p, 0755) != 0 && errno != EEXIST ? -1 : 0;
+}
+
 int usbg_create_function(fake_gadget *g, int type, const char *inst, void *attrs, fake_fn **f) {
   (void)attrs;
   if (type != 14) return -1;
   const char *root = getenv("FAKE_CONFIGFS");
   snprintf(the_fn.dir, sizeof the_fn.dir, "%s/%s/functions/uac2.%s", root, g->name, inst);
-  char cmd[400];
-  snprintf(cmd, sizeof cmd, "mkdir -p '%s'", the_fn.dir);
-  if (system(cmd) != 0) return -1;
+  if (mkdir_p(the_fn.dir) != 0) return -1;
   static const char *attrs_k[] = {"p_chmask", "p_srate", "p_ssize", "c_chmask", "c_srate", "c_ssize",
                                   "c_sync", "p_hs_bint", "c_hs_bint", "function_name"};
   for (unsigned i = 0; i < sizeof attrs_k / sizeof *attrs_k; i++) {
