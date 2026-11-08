@@ -260,3 +260,31 @@ heavily (many plugins or tracks) and check the log for overflow and underrun cou
 - Coming back to standalone mode, the addin's function reappears (log: `uac2.usbaudio added`).
 
 Record every result, with the date, under its step in this file.
+
+## 7. Force: USB-B behind the internal hub (device report, 2026-11-08)
+
+Report from a Force owner (firmware 3.10 stock with SSH, Windows 10 host), 1.1.0 with the standalone fallback. The
+addin loaded (`grep -c usb_audio /proc/$(pidof MPC)/maps` = 4), MPC built no gadget of its own, the fallback built
+`mpcusbaudio`, the UDC read `configured`, and the log showed the forwarder primed ("to computer 388 fr" forever,
+nothing read). The PC saw nothing in either mode. The decisive outputs:
+
+```
+/proc/asound/cards:  5 [Audio]: USB-Audio - MPC USB Audio ... at usb-ff500000.usb-1.7, high speed
+/sys/class/udc/ff580000.usb/state: configured      (also with the PC cable unplugged)
+/sys/bus/usb/devices:
+  2-1    09e8:5040 Force Hub                       (internal hub, SMSC USB5537B per the device tree)
+  2-1.1  214b:7250 USB2.0 HUB -> nanoKONTROL, Minilab3   (the USB-A sockets)
+  2-1.4  152d:0578 USB to ATA/ATAPI Bridge, class 08    (the SATA bay drive, /dev/sda)
+  2-1.5  09e8:0040 Akai Pro Force, two class-01 interfaces (the pad/knob board: a USB MIDI device)
+  2-1.7  1d6b:0104 MPC USB Audio                   (our gadget, enumerated by the Force itself)
+/sys/devices/platform/usb-mux: available_states "internal external", state "internal"
+```
+
+The device port (`ff580000`, dwc2 OTG) is wired to hub port 7; the mux moves the hub's upstream between the
+processor's host controller (`internal`) and the USB-B socket (`external`). MPC switches it with
+`/usr/bin/az01-usbmux-switch` on entering Computer Mode, holding the SATA bridge in reset meanwhile. The Force Link
+Audio author ran the flip on a Force: the gadget enumerates on the PC and every control goes dark. So USB audio in
+standalone mode is not possible on this wiring; the addin now reads the mux and builds nothing (`hub_mux_check`).
+The same mux is in the Live II, X / X SE and one Key 61 device tree of the Gen1 firmware image; the Key 37, One and
+One+ trees have none. Not run by us: the flip itself.
+
