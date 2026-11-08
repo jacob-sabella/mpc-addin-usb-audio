@@ -36,6 +36,7 @@ void mpcua_cfg_defaults(mpcua_cfg *c) {
   c->standalone_create = 1;
   snprintf(c->own_gadget, sizeof c->own_gadget, "mpcusbaudio");
   c->own_wait = 30;
+  c->hub_mux_check = 1;
   snprintf(c->log_path, sizeof c->log_path, "auto");
   mpcua_cfg_finish(c, NULL, 0);
 }
@@ -89,6 +90,7 @@ static int apply(mpcua_cfg *c, const char *k, const char *v) {
   INT("test_tone", test_tone, 0, 1)
   INT("standalone_create", standalone_create, 0, 1)
   INT("own_wait", own_wait, 1, 300)
+  INT("hub_mux_check", hub_mux_check, 0, 1)
   DBL("max_ppm", max_ppm, 1, 20000)
   DBL("drift_bw", drift_bw, 0.0005, 0.5)
 #undef INT

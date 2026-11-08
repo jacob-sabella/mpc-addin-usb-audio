@@ -75,6 +75,31 @@ grep -q "MPC built no gadget 'standalone' in 1 s: built our own, 'mpcusbaudio'" 
   grep -q "MPC is enabling a gadget" "$tmp/own.log" && ! grep -q "no USB audio" "$tmp/own.log" ||
   { echo "FAIL: own gadget"; cat "$tmp/own.log"; exit 1; }
 echo "ok   own gadget logged"
+# A model whose USB-B socket is behind the internal USB hub (the Force): the hub mux reads 'internal', so the addin builds
+# nothing and logs why, instead of the fallback building a gadget the device would enumerate itself.
+mkdir -p "$tmp/mux" "$tmp/cfs4"; printf 'internal\n' > "$tmp/mux/state"
+printf 'configfs=%s\ntap_card=auto\nown_wait=1\nlog=%s\n' "$tmp/cfs4" "$tmp/mux.log" > "$tmp/mux.conf"
+MPC_USB_AUDIO_CONF="$tmp/mux.conf" MPC_USB_AUDIO_MUX_DIR="$tmp/mux" MPC_USB_AUDIO_UDC_DIR="$tmp/udc" MPC_USB_AUDIO_GADGET_WAIT=1 \
+  FAKE_CONFIGFS="$tmp/cfs4" LD_PRELOAD="$ASANLIB:$PWD/$B/libmpc_usb_audio.so" "$B/bin/MPC" "$tmp/cfs4" auto ||
+  { cat "$tmp/mux.log" 2>/dev/null; exit 1; }
+grep -q "no USB audio on this model: its USB hub mux is 'internal'" "$tmp/mux.log" && ! grep -q "built our own" "$tmp/mux.log" &&
+  ! grep -q "no USB audio: after" "$tmp/mux.log" || { echo "FAIL: hub mux"; cat "$tmp/mux.log"; exit 1; }
+echo "ok   hub mux 'internal': no gadget, reason logged"
+# The backstop for the same wiring without a mux node: the gadget is built, then turns up on the device's own USB bus
+# (a fake /sys/bus/usb/devices), so it is removed again.
+G="$tmp/cfs5/mpcusbaudio"
+mkdir -p "$tmp/usbdev/2-1.7" "$G/strings/0x409" "$G/functions/uac2.usbaudio" "$G/configs/c.1/strings/0x409"
+( cd "$G" && touch idVendor idProduct bcdDevice bDeviceClass bDeviceSubClass bDeviceProtocol UDC \
+    strings/0x409/manufacturer strings/0x409/product configs/c.1/strings/0x409/configuration &&
+  cd functions/uac2.usbaudio && touch p_chmask p_srate p_ssize c_chmask c_srate c_ssize )
+printf '1d6b\n' > "$tmp/usbdev/2-1.7/idVendor"; printf '0104\n' > "$tmp/usbdev/2-1.7/idProduct"
+printf 'mpc-addin-usb-audio\n' > "$tmp/usbdev/2-1.7/manufacturer"
+printf 'configfs=%s\ntap_card=0\nown_wait=1\nlog=%s\n' "$tmp/cfs5" "$tmp/loop.log" > "$tmp/loop.conf"
+MPC_USB_AUDIO_CONF="$tmp/loop.conf" MPC_USB_AUDIO_UDC_DIR="$tmp/udc" MPC_USB_AUDIO_USB_DIR="$tmp/usbdev" FAKE_CONFIGFS="$tmp/cfs5" \
+  LD_PRELOAD="$ASANLIB:$PWD/$B/libmpc_usb_audio.so" "$B/bin/MPC" "$tmp/cfs5" loop || { cat "$tmp/loop.log" 2>/dev/null; exit 1; }
+grep -q "built our own" "$tmp/loop.log" && grep -q "enumerated our gadget itself" "$tmp/loop.log" ||
+  { echo "FAIL: loopback backstop"; cat "$tmp/loop.log"; exit 1; }
+echo "ok   loopback backstop: own gadget removed when this device enumerates it"
 # Installed layout: no MPC_USB_AUDIO_CONF; usbaudio.conf is read from the .so's folder and log=auto writes there.
 mkdir -p "$tmp/addin" "$tmp/cfs2"
 cp "$B/libmpc_usb_audio.so" "$tmp/addin/"

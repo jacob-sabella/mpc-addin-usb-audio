@@ -77,7 +77,34 @@ static void own_gadget(void) {
   sh("rm -rf '%s'", root);
 }
 
+/* The hub mux some models have, and our gadget showing up on the device's own USB bus. */
+static void hub_checks(void) {
+  char root[] = "/tmp/mpcua_hub_XXXXXX";
+  CHECK(mkdtemp(root) != NULL);
+  char mux[160], usb[160], state[32] = "x";
+  snprintf(mux, sizeof mux, "%s/usb-mux", root);
+  snprintf(usb, sizeof usb, "%s/usb", root);
+  CHECK_EQ(mpcua_hub_mux_state(mux, state, sizeof state), 0);          /* no mux: port wired to USB-B */
+  sh("mkdir -p '%s/usb-mux' && printf 'internal\\n' > '%s/usb-mux/state'", root);
+  CHECK_EQ(mpcua_hub_mux_state(mux, state, sizeof state), 1);
+  CHECK(!strcmp(state, "internal"));
+  sh("printf 'external\\n' > '%s/usb-mux/state'", root);
+  CHECK_EQ(mpcua_hub_mux_state(mux, state, sizeof state), 1);
+  CHECK(!strcmp(state, "external"));
+
+  CHECK_EQ(mpcua_gadget_on_own_bus(usb, "1d6b", "0104", "mpc-addin-usb-audio"), 0);   /* no sysfs at all */
+  /* a root hub (same vendor, other product), an interface entry, another 1d6b:0104 device, then ours */
+  sh("mkdir -p '%s/usb/usb2' '%s/usb/2-1.7:1.0' '%s/usb/2-1.1' '%s/usb/2-1.7'", root);
+  sh("cd '%s/usb/usb2' && printf '1d6b\\n' > idVendor && printf '0002\\n' > idProduct && printf 'Linux\\n' > manufacturer", root);
+  sh("cd '%s/usb/2-1.1' && printf '1d6b\\n' > idVendor && printf '0104\\n' > idProduct && printf 'Some Pi\\n' > manufacturer", root);
+  CHECK_EQ(mpcua_gadget_on_own_bus(usb, "1d6b", "0104", "mpc-addin-usb-audio"), 0);   /* not ours */
+  sh("cd '%s/usb/2-1.7' && printf '1d6b\\n' > idVendor && printf '0104\\n' > idProduct && printf 'mpc-addin-usb-audio\\n' > manufacturer", root);
+  CHECK_EQ(mpcua_gadget_on_own_bus(usb, "1d6b", "0104", "mpc-addin-usb-audio"), 1);
+  sh("rm -rf '%s'", root);
+}
+
 int main(void) {
+  hub_checks();
   mpcua_cfg c; mpcua_cfg_defaults(&c);
   mpcua_attr a[24];
   int n = mpcua_uac2_attrs(&c, a, 24);

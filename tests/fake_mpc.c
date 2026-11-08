@@ -63,6 +63,17 @@ int main(int argc, char **argv) {
     CHECK_EQ(fake_add_calls, 1); CHECK_EQ(fake_enable_calls, 1);
     T_DONE("hooks: own gadget when MPC builds none, removed when MPC enables one");
   }
+  if (argc > 2 && !strcmp(argv[2], "loop")) {
+    CHECK_EQ(t_active(), 1);
+    char path[512], v[64];
+    snprintf(path, sizeof path, "%s/mpcusbaudio/UDC", root);
+    for (int i = 0; i < 40; i++) { slurp(path, v, sizeof v); if (v[0] && v[0] != '\n') break; usleep(100000); }
+    CHECK(!strcmp(v, "fake.udc"));                  /* built and bound */
+    /* MPC_USB_AUDIO_USB_DIR lists our gadget on this device's own bus: the backstop removes it again */
+    for (int i = 0; i < 80; i++) { slurp(path, v, sizeof v); if (!strcmp(v, "\n")) break; usleep(100000); }
+    CHECK(!strcmp(v, "\n"));
+    T_DONE("hooks: own gadget removed when this device enumerates it itself");
+  }
   if (argc > 2 && !strcmp(argv[2], "auto")) {
     CHECK_EQ(t_active(), 1);
     /* the first card MPC opens becomes the codec; another card is not tapped */

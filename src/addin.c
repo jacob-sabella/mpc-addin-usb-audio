@@ -118,6 +118,21 @@ static int resolve_tap_card(const mpcua_cfg *c) {
   return s ? atoi(s + 8) : -1;
 }
 
+/* Some models (the Force; the Live II and X by their device trees) have their device port behind the
+ * internal USB hub, with a mux that gives the hub to a computer only in Computer Mode. In standalone
+ * mode a gadget there is enumerated by the device itself: build nothing, and say why (see gadget.h). */
+static _Atomic int hub_internal;
+
+static const char *mux_dir(void) {
+  const char *d = getenv("MPC_USB_AUDIO_MUX_DIR");   /* tests */
+  return d && *d ? d : "/sys/devices/platform/usb-mux";
+}
+
+static const char *usb_dir(void) {
+  const char *d = getenv("MPC_USB_AUDIO_USB_DIR");   /* tests */
+  return d && *d ? d : "/sys/bus/usb/devices";
+}
+
 /* MPC builds its standalone gadget within a second or two of starting. If it never does, say so once:
  * the addin has nothing to add USB audio to (reported on an MPC Live II in standalone mode).
  * MPC_USB_AUDIO_GADGET_WAIT overrides the wait, in seconds (tests). */
@@ -131,7 +146,7 @@ static void *gadget_watch(void *arg) {
     struct timespec ts = {1, 0};
     while (nanosleep(&ts, &ts) < 0 && errno == EINTR) {}
   }
-  if (atomic_load(&g_ua.gadget_seen)) return NULL;
+  if (atomic_load(&g_ua.gadget_seen) || atomic_load(&hub_internal)) return NULL;
   char udc[64] = "none", state[64] = "?";
   DIR *d = opendir("/sys/class/udc");
   struct dirent *de;
@@ -187,7 +202,7 @@ static void *own_gadget_main(void *arg) {
     struct timespec ts = {1, 0};
     while (nanosleep(&ts, &ts) < 0 && errno == EINTR) {}
   }
-  if (atomic_load(&g_ua.gadget_seen)) return NULL;
+  if (atomic_load(&g_ua.gadget_seen) || atomic_load(&hub_internal)) return NULL;
   if (mpcua_other_gadget_present(&g_ua.cfg)) {
     mpcua_log("MPC built no gadget '%s', but another one exists: not building ours", g_ua.cfg.gadget);
     return NULL;
@@ -210,6 +225,14 @@ static void *own_gadget_main(void *arg) {
     struct timespec ts = {0, 100 * 1000 * 1000};
     while (nanosleep(&ts, &ts) < 0 && errno == EINTR) {}
     if (mpcua_other_gadget_present(&g_ua.cfg)) { own_remove("another gadget appeared"); break; }
+    /* Backstop for a model whose device port is behind the internal hub but has no mux node: three
+     * seconds after binding, our gadget shows up on this device's own USB bus. No computer hears it. */
+    if (i == 30 && mpcua_gadget_on_own_bus(usb_dir(), MPCUA_OWN_VID, MPCUA_OWN_PID, MPCUA_OWN_MANUFACTURER)) {
+      atomic_store(&hub_internal, 1);
+      own_remove("this device enumerated our gadget itself: its USB-B socket is behind the internal USB hub, "
+                 "so no computer hears a gadget in standalone mode");
+      break;
+    }
   }
   return NULL;
 }
@@ -263,6 +286,18 @@ __attribute__((constructor)) static void mpcua_ctor(void) {
     mpcua_log("active: gadget '%s', %d ch to computer, %u from it, %u Hz, no platform codec: "
               "the first card MPC opens", g_ua.cfg.gadget, g_ua.cfg.n_to_host, g_ua.cfg.host_channels,
               g_ua.cfg.rate);
+  char mux[32] = "";
+  int hm = g_ua.cfg.hub_mux_check ? mpcua_hub_mux_state(mux_dir(), mux, sizeof mux) : 0;
+  if (hm > 0 && !strcmp(mux, "internal")) {
+    atomic_store(&hub_internal, 1);
+    mpcua_log("no USB audio on this model: its USB hub mux is 'internal' (%s/state). The USB-B socket is wired to "
+              "the internal USB hub, which a computer gets only in Computer Mode; in standalone mode a gadget here is "
+              "enumerated by the device itself (the Force; by their device trees also the Live II and X). For audio "
+              "to a computer in standalone mode see the force-link-audio addin (network). hub_mux_check=0 builds the "
+              "gadget anyway", mux_dir());
+  } else if (hm > 0) {
+    mpcua_log("USB hub mux is '%s': a computer holds the internal hub; building the gadget as usual", mux);
+  }
   int e = mpcua_spawn(gadget_watch);
   if (e) mpcua_log("gadget watch thread: %s", strerror(e));
   if (g_ua.cfg.standalone_create && (e = mpcua_spawn(own_gadget_main)))

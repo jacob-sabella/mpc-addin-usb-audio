@@ -18,6 +18,12 @@ standalone_create=1
 own_gadget=mpcusbaudio
 own_wait=30
 
+# Models whose USB-B socket is wired to the internal USB hub (the Force; the Live II and X by their device trees)
+# have a hub mux, /sys/devices/platform/usb-mux, that reads "internal" in standalone mode: a gadget there is
+# enumerated by the device itself, never by a computer. The addin then builds nothing and says so in the log.
+# 0 builds it anyway (for experiments with the mux; see the README's Limits).
+hub_mux_check=1
+
 # Must equal the rate MPC runs its codec at, or nothing is tapped (the log says so).
 rate=44100
 # Bytes per sample on USB: 2, 3 or 4.

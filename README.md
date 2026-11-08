@@ -16,13 +16,19 @@ are needed.
 steps 1-2); computer-to-MPC audio, drift over time, load and the other USB modes (steps 3-6) are not yet.
 The design is backed by `docs/FEASIBILITY.md`.
 
+**Not on the Force, MPC Live II or MPC X.** On those models the USB-B socket sits behind the internal USB hub, which
+a computer gets only in Computer Mode, so in standalone mode no USB gadget on the device can reach a computer; the
+device enumerates it itself. That is wiring, not firmware (Force: device report, 2026-11-08; Live II and X: their
+device trees). The addin detects it, builds nothing and says why in the log. Details and the alternative under Limits.
+
 ## How it works
 
 1. MPC builds its standalone USB gadget (USB MIDI) with libusbgx at every start. The addin hooks
    `usbg_enable_gadget` and, just before the gadget is bound, adds a `uac2` function to it with
    MPC's own libusbgx handles. MPC's normal teardown therefore removes it too.
    Where MPC builds no gadget in standalone mode, the addin builds one of its own after `own_wait`
-   seconds, with only the audio function (`standalone_create`, below).
+   seconds, with only the audio function (`standalone_create`, below). On models whose device port is behind
+   the internal USB hub (Limits) it builds nothing.
 2. It hooks `snd_pcm_open`/`hw_params`/`close` to recognise MPC's playback and capture streams on
    the built-in codec.
 3. In MPC's audio thread, the `snd_pcm_writei`/`readi` hooks (and the non-interleaved variants)
@@ -108,9 +114,24 @@ The log is `usbaudio.log` in the addin's folder (`log=` moves or disables it), w
 - The computer sees MPC's main out as it goes to the codec. Per-track outputs exist only as far as
   MPC routes them to codec outputs (`out3`... on devices with more than two outputs).
 - Not active in MPC's controller (computer) mode. MPC provides its own USB audio there.
+- **Force, MPC Live II, MPC X: no USB audio in standalone mode, by hardware.** On these models the device's only USB
+  device port is wired to port 7 of the internal USB hub (an SMSC USB5537B), and a mux (`/sys/devices/platform/usb-mux`,
+  states `internal`/`external`) decides who is upstream of that hub: the device's own processor in standalone mode,
+  the USB-B socket in Computer Mode and Update Mode. In standalone mode a gadget on that port is therefore enumerated
+  by the device itself (a Force listed "MPC USB Audio" as its own sound card, at `usb-2-1.7`), and a computer on USB-B
+  hears nothing. Flipping the mux hands the whole hub to the computer: the pad/knob board, the SATA bay drive and the
+  USB-A sockets go with it (the author of Force Link Audio confirmed this on a Force: the gadget enumerates, every
+  control goes dark). The addin reads the mux at start, builds nothing when it says `internal`, and logs why;
+  `hub_mux_check=0` builds anyway. As a backstop for a model with the same wiring but no mux node, a gadget of ours
+  that turns up on the device's own USB bus is removed again. Verified on a Force (firmware 3.10, device report
+  2026-11-08); the Live II and X by their device trees in the MPC firmware image (one of the two Key 61 device trees
+  carries the mux too; the Key 37, One and One+ have none, their device port is wired to the USB-B socket). For audio
+  to a computer from a standalone Force, the catalog's `force-link-audio` addin streams the main mix over the network
+  to Ableton Link Audio receivers.
 - Where MPC builds its standalone USB gadget (the USB MIDI port; the MPC Key 37), the audio function is added
-  to it. Some setups build none in standalone mode: an MPC One on HAKAI 3.9.1 (issue #4) and an MPC Live II on
-  custom firmware (reported 2026-10-09). There the addin waits `own_wait` seconds (30) and then builds a gadget
+  to it. Some setups build none in standalone mode: an MPC One on HAKAI 3.9.1 (issue #4). The MPC Live II on
+  custom firmware (issue #1, 2026-10-09) builds none either, but for the hub reason above, which no fallback can
+  help. For the MPC One the addin waits `own_wait` seconds (30) and then builds a gadget
   of its own, `own_gadget`, with only the audio function, so the computer sees a USB audio device but no MPC
   MIDI port. The log says "MPC built no gadget ... built our own". It removes that gadget as soon as MPC enables
   one, when MPC exits, and at the next MPC start (MPC restarts on a switch to controller mode).

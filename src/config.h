@@ -35,6 +35,7 @@ typedef struct {
   int standalone_create;    /* standalone_create=1 (no gadget from MPC: create our own, own_gadget) */
   char own_gadget[64];      /* own_gadget=mpcusbaudio */
   int own_wait;             /* own_wait=30        (seconds to wait for MPC's gadget first) */
+  int hub_mux_check;        /* hub_mux_check=1    (build nothing behind an 'internal' USB hub mux: Force, Live II, X) */
   char log_path[160];       /* log=auto: usbaudio.log next to the .so; a path; "" disables */
 
   mpcua_chsrc to_host_map[MPCUA_MAX_CH]; int n_to_host;

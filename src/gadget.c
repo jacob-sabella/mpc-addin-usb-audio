@@ -82,6 +82,44 @@ int mpcua_gadget_set_iad_class(const char *gdir) {
   return 0;
 }
 
+/* ---- the hub mux, and our gadget on the device's own bus ------------------------------------- */
+
+static int read_line(const char *path, char *out, size_t n) {
+  FILE *f = fopen(path, "re");
+  if (!f) return -1;
+  if (!fgets(out, (int)n, f)) out[0] = 0;
+  fclose(f);
+  out[strcspn(out, "\n")] = 0;
+  return 0;
+}
+
+int mpcua_hub_mux_state(const char *mux_dir, char *state, size_t n) {
+  char p[384];
+  struct stat st;
+  if (snprintf(p, sizeof p, "%s/state", mux_dir) >= (int)sizeof p) return 0;
+  if (stat(p, &st) != 0) return 0;
+  return read_line(p, state, n) == 0 ? 1 : -1;
+}
+
+int mpcua_gadget_on_own_bus(const char *usb_dir, const char *vid, const char *pid, const char *manufacturer) {
+  DIR *d = opendir(usb_dir);
+  if (!d) return 0;
+  struct dirent *de;
+  int found = 0;
+  while (!found && (de = readdir(d))) {
+    if (de->d_name[0] == '.' || strchr(de->d_name, ':')) continue;
+    char p[400], v[24], pr[24], m[64];
+    if (snprintf(p, sizeof p, "%s/%s/idVendor", usb_dir, de->d_name) >= (int)sizeof p) continue;
+    if (read_line(p, v, sizeof v) != 0 || strcmp(v, vid)) continue;
+    snprintf(p, sizeof p, "%s/%s/idProduct", usb_dir, de->d_name);
+    if (read_line(p, pr, sizeof pr) != 0 || strcmp(pr, pid)) continue;
+    snprintf(p, sizeof p, "%s/%s/manufacturer", usb_dir, de->d_name);
+    if (read_line(p, m, sizeof m) == 0 && !strcmp(m, manufacturer)) found = 1;
+  }
+  closedir(d);
+  return found;
+}
+
 /* ---- our own gadget (standalone fallback) ---------------------------------------------------- */
 
 static int mk(const char *path) {
@@ -145,13 +183,13 @@ int mpcua_own_gadget_create(const mpcua_cfg *c, const char *udc_dir, char *err, 
 
   STEP(mk(g), "gadget");
   /* The Linux Foundation's multifunction composite gadget ID, as configfs examples use. */
-  STEP(wr(g, "idVendor", "0x1d6b"), "idVendor");
-  STEP(wr(g, "idProduct", "0x0104"), "idProduct");
+  STEP(wr(g, "idVendor", "0x" MPCUA_OWN_VID), "idVendor");
+  STEP(wr(g, "idProduct", "0x" MPCUA_OWN_PID), "idProduct");
   STEP(wr(g, "bcdDevice", "0x0100"), "bcdDevice");
   if (c->iad_class) STEP(mpcua_gadget_set_iad_class(g), "device class");
   snprintf(p, sizeof p, "%s/strings/0x409", g);
   STEP(mk(p), "strings");
-  STEP(wr(p, "manufacturer", "mpc-addin-usb-audio"), "manufacturer");
+  STEP(wr(p, "manufacturer", MPCUA_OWN_MANUFACTURER), "manufacturer");
   STEP(wr(p, "product", c->function_name[0] ? c->function_name : "MPC USB Audio"), "product");
 
   STEP(mk(fdir), "uac2 function");
