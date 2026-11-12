@@ -24,7 +24,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: open-mpc/mpc-vst-plugins
-          ref: a0dda4f8ea34aa3b5f13468b570bcbaf39dbd362
+          ref: dbe1f2b08eef98213611bd9ff6d9e9437d350d95
           path: mpc-vst-plugins
       # TSan can't map its shadow memory with the runner's default 32 bits of mmap randomness
       - run: sudo sysctl -q vm.mmap_rnd_bits=28
